@@ -114,9 +114,9 @@ _Default 84, min 10, max 1000_
 
 #### UCI_LimitStrength
 
-Activate the strength limit by a weaker play in a random fashion to simulate human blunders.
+Activate the handicap mode and the related following options: in this case, the evaluation function is always the classical one.
 
-#### UCI_Elo
+#### UCI_Elo (CB only for chessbase products users)
 
 _Default 2850, min 1350, max 2850_
 UCI-protocol compliant version of Strength parameter.
@@ -131,6 +131,17 @@ Internally the UCI_Elo value will be converted to a Strength value according to 
 Every school corresponds to a different evaluation function, more and more refined.
 The UCI_Elo feature is controlled by the chess GUI, and usually doesn't appear in the configuration
 window.
+
+#### Handicapped Depth
+The engine stop calculating when it joins the handicapped depth, based on the following table:
+
+Elo range | Handicapped Depth |
+| ------ | ------ |
+| [0,1999] | [1,6] |
+| [2000,2199] | [7,9] |
+| [2200,2399] | [10,12] |
+| [2400,2850] | [13,20] |
+
 
 ### Sygyzy End Game table bases
 

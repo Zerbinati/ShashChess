@@ -26,8 +26,9 @@
 #include "search.h"
 #include "syzygy/tbprobe.h"
 #include "thread.h"
-#include "tt.h"
+#include "learn.h"
 #include "uci.h"
+#include "polybook.h" //cerebellum
 using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
@@ -38,13 +39,7 @@ int main(int argc, char* argv[]) {
   Utility::init(argv[0]); //Khalid
   UCI::init(Options);
   Tune::init();
-  //from Kelly begin
-  if(!(Options["Persisted learning"]== "Off"))
-  {
-  	Utility::init(argv[0]); //Khalid
-	initLearning ();//Kelly
-  }
-  //from Kelly end
+  LD.init();//Kelly
   PSQT::init();
   Bitboards::init();
   Position::init();
@@ -52,6 +47,10 @@ int main(int argc, char* argv[]) {
   Endgames::init();
   Threads.set(size_t(Options["Threads"]));
   Threads.setFull(Options["Full depth threads"]);//Full threads patch
+  //cerebellum begin
+  polybook.init(Options["BookFile"]);
+  polybook2.init(Options["BookFile2"]);
+  //cerebellum end
   Search::clear(); // After threads are up
   Eval::NNUE::init();
 

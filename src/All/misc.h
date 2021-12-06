@@ -74,9 +74,10 @@ std::ostream& operator<<(std::ostream&, SyncCout);
 #define sync_cout std::cout << IO_LOCK
 #define sync_endl std::endl << IO_UNLOCK
 
-// `ptr` must point to an array of size at least
-// `sizeof(T) * N + alignment` bytes, where `N` is the
-// number of elements in the array.
+
+// align_ptr_up() : get the first aligned element of an array.
+// ptr must point to an array of size at least `sizeof(T) * N + alignment` bytes,
+// where N is the number of elements in the array.
 template <uintptr_t Alignment, typename T>
 T* align_ptr_up(T* ptr)
 {
@@ -86,19 +87,36 @@ T* align_ptr_up(T* ptr)
   return reinterpret_cast<T*>(reinterpret_cast<char*>((ptrint + (Alignment - 1)) / Alignment * Alignment));
 }
 
-template <typename T>
-class ValueListInserter {
-public:
-  ValueListInserter(T* v, std::size_t& s) :
-    values(v),
-    size(&s)
-  {
-  }
 
-  void push_back(const T& value) { values[(*size)++] = value; }
-private:
-  T* values;
-  std::size_t* size;
+// IsLittleEndian : true if and only if the binary is compiled on a little endian machine
+static inline const union { uint32_t i; char c[4]; } Le = { 0x01020304 };
+static inline const bool IsLittleEndian = (Le.c[0] == 4);
+
+
+// RunningAverage : a class to calculate a running average of a series of values.
+// For efficiency, all computations are done with integers.
+class RunningAverage {
+  public:
+
+      // Constructor
+      RunningAverage() {}
+
+      // Reset the running average to rational value p / q
+      void set(int64_t p, int64_t q)
+        { average = p * PERIOD * RESOLUTION / q; }
+
+      // Update average with value v
+      void update(int64_t v)
+        { average = RESOLUTION * v + (PERIOD - 1) * average / PERIOD; }
+
+      // Test if average is strictly greater than rational a / b
+      bool is_greater(int64_t a, int64_t b)
+        { return b * average > a * PERIOD * RESOLUTION ; }
+
+  private :
+      static constexpr int64_t PERIOD     = 4096;
+      static constexpr int64_t RESOLUTION = 1024;
+      int64_t average;
 };
 
 template <typename T, std::size_t MaxSize>
@@ -114,7 +132,6 @@ public:
   const T& operator[](std::size_t index) const { return values_[index]; }
   const T* begin() const { return values_; }
   const T* end() const { return values_ + size_; }
-  operator ValueListInserter<T>() { return ValueListInserter(values_, size_); }
 
   void swap(ValueList& other) {
     const std::size_t maxSize = std::max(size_, other.size_);
@@ -136,7 +153,6 @@ namespace Utility {
   bool is_game_decided(const Position &pos, Value lastScore);
   //end khalid from learner
 }
-
 /// xorshift64star Pseudo-Random Number Generator
 /// This class is based on original code written and dedicated
 /// to the public domain by Sebastiano Vigna (2014).

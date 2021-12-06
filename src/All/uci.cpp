@@ -28,7 +28,7 @@
 #include "search.h"
 #include "thread.h"
 #include "timeman.h"
-#include "tt.h"
+#include "learn.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
 
@@ -38,7 +38,6 @@ namespace Stockfish {
 
 extern vector<string> setup_bench(const Position&, istream&);
 
-int maximumPly = 0; //from Kelly
 namespace {
 
   // FEN string of the initial position, normal chess
@@ -54,7 +53,6 @@ namespace {
 
     Move m;
     string token, fen;
-
     is >> token;
 
     if (token == "startpos")
@@ -70,27 +68,25 @@ namespace {
 
     states = StateListPtr(new std::deque<StateInfo>(1)); // Drop old and create a new one
     pos.set(fen, Options["UCI_Chess960"], &states->back(), Threads.main());
-    int plies = 0;//from Kelly
+
     // Parse move list (if any)
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
     {
-		//kelly begin
-		if ((usePersistedLearning != PersistedLearningUsage::Off) && (plies > maximumPly))
-		{
-		  plies++;
-		  LearningFileEntry currentLearningEntry;
-		  currentLearningEntry.depth = 0;
-		  currentLearningEntry.hashKey = pos.key();
-		  currentLearningEntry.move = m;
-		  currentLearningEntry.score = VALUE_NONE;
-		  currentLearningEntry.performance = 100;
-		  if (usePersistedLearning != PersistedLearningUsage::Self)
-		  {
-		      insertIntoOrUpdateLearningTable(currentLearningEntry);
-		  }
-		  maximumPly = plies;
-		}
-		//kelly end
+        //Kelly begin
+        if (LD.is_enabled() && LD.learning_mode() != LearningMode::Self && !LD.is_paused())
+        {
+            PersistedLearningMove persistedLearningMove;
+
+            persistedLearningMove.key = pos.key();
+            persistedLearningMove.learningMove.depth = 0;
+            persistedLearningMove.learningMove.move = m;
+            persistedLearningMove.learningMove.score = VALUE_NONE;
+            persistedLearningMove.learningMove.performance = 100;
+
+            LD.add_new_learning(persistedLearningMove.key, persistedLearningMove.learningMove);
+        }
+        //Kelly end
+
         states->emplace_back();
         pos.do_move(m, states->back());
     }
@@ -203,19 +199,19 @@ namespace {
         else if (token == "setoption")  setoption(is);
         else if (token == "position")   position(pos, is, states);
         else if (token == "ucinewgame") {
-	    //from Kelly
-            if (usePersistedLearning != PersistedLearningUsage::Off)
-              {
-        	maximumPly = 0;
-        	setStartPoint();
-		if (usePersistedLearning == PersistedLearningUsage::Self)
-		{
-		    putGameLineIntoLearningTable();
-		}
-              }
-	   //end from Kelly
-	   Search::clear(); elapsed = now(); // Search::clear() may take some while
-	}
+            //Kelly begin            
+            if (LD.is_enabled())
+            { 
+	            if( LD.learning_mode() == LearningMode::Self && !LD.is_paused())
+	            {
+	                putGameLineIntoLearningTable();
+	        	}
+	            setStartPoint();
+			}
+			//Kelly end
+
+            Search::clear(); elapsed = now(); // Search::clear() may take some while
+        }
     }
 
     elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
@@ -238,13 +234,13 @@ namespace {
      // Coefficients of a 3rd order polynomial fit based on fishtest data
      // for two parameters needed to transform eval to the argument of a
      // logistic function.
-     double as[] = {-8.24404295, 64.23892342, -95.73056462, 153.86478679};
-     double bs[] = {-3.37154371, 28.44489198, -56.67657741,  72.05858751};
+     double as[] = {-3.68389304,  30.07065921, -60.52878723, 149.53378557};
+     double bs[] = {-2.0181857,   15.85685038, -29.83452023,  47.59078827};
      double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
      double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
 
      // Transform eval to centipawns with limited range
-     double x = std::clamp(double(100 * v) / PawnValueEg, -1000.0, 1000.0);
+     double x = std::clamp(double(100 * v) / PawnValueEg, -2000.0, 2000.0);
 
      // Return win rate in per mille (rounded to nearest)
      return int(0.5 + 1000 / (1 + std::exp((a - x) / b)));
@@ -279,25 +275,31 @@ void UCI::loop(int argc, char* argv[]) {
       token.clear(); // Avoid a stale if getline() returns empty or blank line
       is >> skipws >> token;
 
-      //from Kelly begin
-      if (token == "quit"
-                ||  token == "stop")
-      	{
+      if (    token == "quit"
+          ||  token == "stop")
+      {
+          Threads.stop = true;
 
-          if ((usePersistedLearning != PersistedLearningUsage::Off) && token == "quit" && !Options["Read only learning"] && !pauseExperience)
-          //from Kelly begin
+          //Kelly begin
+          if (token == "quit" && LD.is_enabled() && !LD.is_paused())
           {
+              //Wait for the current search operation (if any) to stop
+              //before proceeding to save experience data
+              Threads.main()->wait_for_search_finished();
+
               //Perform Q-learning if enabled
-              if (usePersistedLearning == PersistedLearningUsage::Self)
+              if (LD.learning_mode() == LearningMode::Self)
+              {
                   putGameLineIntoLearningTable();
-
-              //Save to learning file
-              writeLearningFile();
+			  }
+			  if(!LD.is_readonly())
+			  {
+              	//Save to learning file
+              	LD.persist();
+              }
           }
-      	  Threads.stop = true;
-      	}
-      //from Kelly end
-
+          //Kelly end
+      }
       // The GUI sends 'ponderhit' to tell us the user has played the expected move.
       // So 'ponderhit' will be sent if we were told to ponder on the same move the
       // user has played. We should continue searching but switch from pondering to
@@ -313,23 +315,25 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "setoption")  setoption(is);
       else if (token == "go")         go(pos, is, states);
       else if (token == "position")   position(pos, is, states);
-	  else if (token == "ucinewgame")
-	  {
-	      //from Kelly and Khalid
-	      if (usePersistedLearning != PersistedLearningUsage::Off)
+      else if (token == "ucinewgame")
+      {
+          //Kelly and Khalid
+          if (LD.is_enabled())
           {
-	          maximumPly = 0;
-	          setStartPoint();
-	
-	          //Perform Q-learning if enabled
-	          if (usePersistedLearning == PersistedLearningUsage::Self)
-	              putGameLineIntoLearningTable();
-	
-	          //Save to learning file
-	          if (!Options["Read only learning"])
-	              writeLearningFile();
+              //Perform Q-learning if enabled
+              if (LD.learning_mode() == LearningMode::Self)
+              {
+                  putGameLineIntoLearningTable();
+			  }
+
+              if(!LD.is_readonly())
+              {
+	              //Save to learning file
+	              LD.persist();
+              }
+          	  setStartPoint();
           }
-          Search::clear();//end from Kelly and Khalid
+          Search::clear();//Kelly and Khalid end
       }
       else if (token == "isready")    sync_cout << "readyok" << sync_endl;
 
@@ -340,13 +344,13 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "d")        sync_cout << pos << sync_endl;
       else if (token == "eval")     trace_eval(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
-      else if (token == "export_net") {
+      else if (token == "export_net")
+      {
           std::optional<std::string> filename;
           std::string f;
-          if (is >> skipws >> f) {
-            filename = f;
-          }
-          Eval::NNUE::export_net(filename);
+          if (is >> skipws >> f)
+              filename = f;
+          Eval::NNUE::save_eval(filename);
       }
       else if (!token.empty() && token[0] != '#')
           sync_cout << "Unknown command: " << cmd << sync_endl;

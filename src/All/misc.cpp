@@ -69,7 +69,7 @@ namespace {
 
 /// Version number. If Version is left empty, then compile date in the format
 /// DD-MM-YY and show in engine_info.
-const string Version = "17";
+const string Version = "20.1";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -112,7 +112,14 @@ public:
 
     static Logger l;
 
-    if (!fname.empty() && !l.file.is_open())
+    if (l.file.is_open())
+    {
+        cout.rdbuf(l.out.buf);
+        cin.rdbuf(l.in.buf);
+        l.file.close();
+    }
+
+    if (!fname.empty())
     {
         l.file.open(fname, ifstream::out);
 
@@ -124,12 +131,6 @@ public:
 
         cin.rdbuf(&l.in);
         cout.rdbuf(&l.out);
-    }
-    else if (fname.empty() && l.file.is_open())
-    {
-        cout.rdbuf(l.out.buf);
-        cin.rdbuf(l.in.buf);
-        l.file.close();
     }
   }
 };
@@ -414,7 +415,6 @@ void prefetch(void* addr) {
 /// std_aligned_alloc() must be freed with std_aligned_free().
 
 void* std_aligned_alloc(size_t alignment, size_t size) {
-
 #if defined(POSIXALIGNEDALLOC)
   void *mem;
   return posix_memalign(&mem, alignment, size) ? nullptr : mem;
@@ -426,7 +426,6 @@ void* std_aligned_alloc(size_t alignment, size_t size) {
 }
 
 void std_aligned_free(void* ptr) {
-
 #if defined(POSIXALIGNEDALLOC)
   free(ptr);
 #elif defined(_WIN32)
@@ -443,6 +442,7 @@ void std_aligned_free(void* ptr) {
 static void* aligned_large_pages_alloc_windows(size_t allocSize) {
 
   #if !defined(_WIN64)
+    (void)allocSize; // suppress unused-parameter compiler warning
     return nullptr;
   #else
 
@@ -565,7 +565,7 @@ void bindThisThread(size_t) {}
 int best_group(size_t idx) {
 
   int threads = 0;
-  int nodes = 0;
+  int groups = 0;
   int cores = 0;
   DWORD returnLength = 0;
   DWORD byteOffset = 0;
@@ -593,8 +593,8 @@ int best_group(size_t idx) {
 
   while (byteOffset < returnLength)
   {
-      if (ptr->Relationship == RelationNumaNode)
-          nodes++;
+      if (ptr->Relationship == RelationGroup)
+          groups += ptr->Group.MaximumGroupCount;
 
       else if (ptr->Relationship == RelationProcessorCore)
       {
@@ -609,23 +609,23 @@ int best_group(size_t idx) {
 
   free(buffer);
 
-  std::vector<int> groups;
+  std::vector<int> core_groups;
 
-  // Run as many threads as possible on the same node until core limit is
-  // reached, then move on filling the next node.
-  for (int n = 0; n < nodes; n++)
-      for (int i = 0; i < cores / nodes; i++)
-          groups.push_back(n);
+  // Run as many threads as possible on the same group until core limit is
+  // reached, then move on filling the next group.
+  for (int n = 0; n < groups; n++)
+      for (int i = 0; i < cores / groups; i++)
+          core_groups.push_back(n);
 
   // In case a core has more than one logical processor (we assume 2) and we
   // have still threads to allocate, then spread them evenly across available
-  // nodes.
+  // groups.
   for (int t = 0; t < threads - cores; t++)
-      groups.push_back(t % nodes);
+      core_groups.push_back(t % groups);
 
   // If we still have more threads than the total number of logical processors
   // then return -1 and let the OS to decide what to do.
-  return idx < groups.size() ? groups[idx] : -1;
+  return idx < core_groups.size() ? core_groups[idx] : -1;
 }
 
 

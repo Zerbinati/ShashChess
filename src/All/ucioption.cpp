@@ -25,9 +25,11 @@
 #include "misc.h"
 #include "search.h"
 #include "thread.h"
+#include "learn.h"
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "polybook.h" //cerebellum
 
 using std::string;
 
@@ -43,16 +45,25 @@ void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 void on_logger(const Option& o) { start_logger(o); }
 void on_threads(const Option& o) { Threads.set(size_t(o)); }
 void on_full_threads(const Option& o) { Threads.setFull(o); } //full threads patch
-void on_persisted_learning(const Option& o) { if (!(o == "Off")) initLearning();}//Kelly learning
+void on_persisted_learning(const Option& o) { if (!(o == "Off")){ LD.set_learning_mode(o);}}//Kelly learning
+void on_readonly_learning(const Option& o) { if (!(o == "Off")) { LD.set_readonly(o); } }
 void on_tb_path(const Option& o) { Tablebases::init(o); }
 void on_use_NNUE(const Option& ) { Eval::NNUE::init(); }
 void on_eval_file(const Option& ) { Eval::NNUE::init(); }
+void on_UCI_LimitStrength(const Option& ) { Eval::NNUE::init(); }
+void on_LimitStrength_CB(const Option& ) { Eval::NNUE::init(); }
 //livebook begin
 void on_livebook_url(const Option& o) { Search::setLiveBookURL(o); }
 void on_livebook_timeout(const Option& o) { Search::setLiveBookTimeout(o); }
 void on_live_book_retry(const Option& o) { Search::set_livebook_retry(o); }
 void on_livebook_depth(const Option& o) { Search::set_livebook_depth(o); }
 //livebook end
+//cerebellum+book begin
+void on_book_file(const Option& o) { polybook.init(o); }
+void on_book_file2(const Option& o) { polybook2.init(o); }
+void on_best_book_move(const Option& o) { polybook.set_best_book_move(o); }
+void on_book_depth(const Option& o) { polybook.set_book_depth(o); }
+//cerebellum+book end
 
 /// Our case insensitive less() function as required by UCI protocol
 bool CaseInsensitiveLess::operator() (const string& s1, const string& s2) const {
@@ -78,9 +89,11 @@ void init(OptionsMap& o) {
   o["Slow Mover"]            	   << Option(100, 10, 1000);
   o["UCI_Chess960"]          	   << Option(false);
   o["UCI_AnalyseMode"]       	   << Option(false);
-  //handicap mode
-  o["UCI_LimitStrength"]     	   << Option(false);
-  o["UCI_Elo"]               << Option(2850, 1350, 2850); //from ShashChess
+  o["UCI_LimitStrength"]     	   << Option(false, on_UCI_LimitStrength);
+  o["Handicapped Depth"]     	   << Option(false);
+  o["LimitStrength_CB"]        << Option(false,on_LimitStrength_CB);
+  o["UCI_Elo"]                     << Option(2850, 1350, 2850);//handicap mode from ShashChess 
+  o["ELO_CB"]                  << Option(2850, 1350, 2850);//handicap mode from ShashChess 
   o["UCI_ShowWDL"]           << Option(false);
   o["SyzygyPath"]            	   << Option("<empty>", on_tb_path);
   o["SyzygyProbeDepth"]            << Option(1, 1, 100);
@@ -98,10 +111,16 @@ void init(OptionsMap& o) {
   o["Live Book Contribute"]  << Option(false);
   o["Live Book Depth"]       << Option(100, 1, 100, on_livebook_depth);
   //livebook end
+  //cerebellum book begin
+  o["BookFile"]              << Option("<empty>", on_book_file);
+  o["BookFile2"]             << Option("<empty>", on_book_file2);
+  o["BestBookMove"]          << Option(true, on_best_book_move);
+  o["BookDepth"]             << Option(255, 1, 255, on_book_depth);
+  //cerebellum book end  
   o["Full depth threads"]    << Option(0, 0, 512, on_full_threads); //if this is used, must be after #Threads is set.
   o["Opening variety"]       << Option (0, 0, 40);
   o["Persisted learning"]    << Option("Off var Off var Standard var Self", "Off", on_persisted_learning);
-  o["Read only learning"]    << Option(false);
+  o["Read only learning"]    << Option(false, on_readonly_learning);
   o["MCTS"]                  << Option("Off var Off var Single var Multi", "Off");
   o["Multi Strategy"]        << Option(20, 0, 100);
   o["Multi MinVisits"]       << Option(5, 0, 1000);  
@@ -162,7 +181,7 @@ Option::operator double() const {
 }
 
 Option::operator std::string() const {
-  assert(type == "string");
+  assert(type == "string" || type == "combo");
   return currentValue;
 }
 
@@ -192,7 +211,7 @@ Option& Option::operator=(const string& v) {
 
   assert(!type.empty());
 
-  if (   (type != "button" && v.empty())
+  if (   (type != "button" && type != "string" && v.empty())
       || (type == "check" && v != "true" && v != "false")
       || (type == "spin" && (stof(v) < min || stof(v) > max)))
       return *this;
