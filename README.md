@@ -166,7 +166,11 @@ Choice a test position with a few pieces on the board (from 7 to 12). For exampl
 - Fen: _8/5r2/R7/8/1p5k/p3P3/4K3/8 w -- 0 1_ Solution : Ra4 (=)
 - Fen: _1R6/7k/1P5p/5p2/3K2p1/1r3P1P/8 b - - 1 1_ Solution: 1...h5 !! (=)
 
-
+#### Syzygy50MoveRule
+    
+Disable to let fifty-move rule draws detected by Syzygy tablebase probes count
+as wins or losses. This is useful for ICCF correspondence games.
+	
 #### SygyzyProbeLimit
 
 _Integer, Default: 6, Min: 0, Max: 6_
@@ -186,8 +190,13 @@ If the number is greater than threads number, all threads are for full depth bru
 ### MonteCarlo Tree Search section (experimental: thanks to original Stephan Nicolet work)
 #### MCTS
 
-Default is Off: no MonteCarlo Tree Search algorithm. The other values are "Single" and "Multi", 
-where "Single" means only main thread does MCTS and "Multi" means all threads but main one does MCTS
+_Boolean, Default: False_ If activated, the engine uses the MonteCarlo Tree Search in the manner specified by the following parameters.
+
+#### MCTSThreads
+
+_Integer, Default: 0, Min: 0, Max: 512_
+The number of settled threads to use for MCTS search except the first (main) one always for alpha-beta search. 
+In particular, if the number is greater than threads number, they will all do a montecarlo tree search, always except the first (main) for alpha-beta search.
 
 #### Multi Strategy 
 
@@ -255,6 +264,10 @@ When this option is true, the saved experience file name will be modified to som
     the network parameters must be available to load from file (see also EvalFile),
     if they are not embedded in the binary.
 
+### GoldDigger
+
+_Boolean, Default: False_ If activated, the engine favors depth over the pruning of various selectivity techniques. In this way, it can uncover normally hidden possibilities. In this mode, it solves many more hard positions, although it loses slightly in absolute game strength.
+
 ### Persisted learning
 
 Default is Off: no learning algorithm. The other values are "Standard" and "Self", this last to activate the [Q-learning](https://youtu.be/qhRNvCVVJaA?list=PLZbbT5o_s2xoWNVdDudn51XM8lOuZ_Njv), optimized for self play. Some GUIs don't write the experience file in some game's modes because the uci protocol is differently implemented
@@ -265,7 +278,7 @@ The persisted learning is based on a collection of one or more positions stored 
 - _board signature (hash key)_
 - _best move depth_
 - _best move score_
-- _best move performance_ , a new parameter you can calculate with any learning application supporting this specification. An example is the private one, kernel of SaaS part of [ChessProbe](http://www.chessprobe.com) AI portal. The idea is to calculate it based on pattern recognition concept. In the portal, you can also exploit the reports of another NLG (virtual trainer) application and buy the products in the digishop based on all this. This open-source part has the performance default. So, it doesn't use it. Clearly, even if already strong, this private learning algorithm is a lot stronger as demostrate here: [Graphical result](https://github.com/amchess/BrainLearn/tree/master/tests/6-5.jpg)
+- _best move performance_ , a new parameter you can calculate with any learning application supporting this specification. An example is the private one, kernel of SaaS part of [Alpha-Chess](http://www.alpha-chess.com) AI portal. The idea is to calculate it based on pattern recognition concept. In the portal, you can also exploit the reports of another NLG (virtual trainer) application and buy the products in the digishop based on all this. This open-source part has the performance default. So, it doesn't use it. Clearly, even if already strong, this private learning algorithm is a lot stronger as demostrate here: [Graphical result](https://github.com/amchess/BrainLearn/tree/master/tests/6-5.jpg)
 
 This file is loaded in an hashtable at the engine load and updated each time the engine receive quit or stop uci command.
 When BrainLearn starts a new game or when we have max 8 pieces on the chessboard, the learning is activated and the hash table updated each time the engine has a best score
@@ -294,8 +307,20 @@ If activated, the learning file is only read.
 _Default: no option settled_
 The engine will determine dynamically the position's type starting from a "Capablanca/default
 positions".
-If one or more (mixed algorithms/positions types at the boundaries) of the three following options
+If one or more (mixed algorithms/positions types at the boundaries) of the seven following options
 are settled, it will force the initial position/algorithm understanding
+
+Centipawns range | Shashin position’s type        |
+| ---------------| ------------------------------ |
+| < -140         | High Petrosian                 |
+| [-140, -70)    | Medium Petrosian               |
+| [-70, -35)     | Low Petrosian                  |
+| [-35, -15]     | Caos: Capablanca-Low Petrosian |
+| (-15,15)       | Capablanca                     |
+| [15, 35]       | Caos: Capablanca-Low Tal       |
+| (35,70]        | Low Tal                        |
+| (70,140]       | Middle Tal                     |
+| > 140          | High Tal                       |
 
 #### Tal
 
@@ -311,7 +336,7 @@ Defense position/algorithm (the "reversed colors" Tal)
 
 ## Acknowledgments
 
-- Sergey Aleksandrovitch Kozlov for his very interesting patch and code on Sugar engine
+- Kozlov Sergey Aleksandrovitsch for his very interesting patch and code on Sugar engine
 - Omar Khalid for his great experience in microsoft c/cpp programming environment
 - Alexei Chernakoff for his pretious suggestions about the android version and its contribution to it
 - Dariusz Domagala for the Mac version

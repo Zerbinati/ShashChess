@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2021 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -30,6 +30,10 @@ namespace Stockfish {
 class Position;
 
 namespace Search {
+//nodeTypeHistory begin
+// Different node types, used as a template parameter
+enum NodeType { NonPV, PV, Root };
+//nodeTypeHistory end
 
 /// Threshold used for countermoves based pruning
 constexpr int CounterMovePruneThreshold = 0;
@@ -50,10 +54,13 @@ struct Stack {
   Depth depth;
   int statScore;
   int moveCount;
+  int distanceFromPv;//from Shashin
   bool inCheck;
   bool ttPv;
   bool ttHit;
   int doubleExtensions;
+  int cutoffCnt;
+  NodeType nodeType; //nodeTypeHistory
 };
 
 

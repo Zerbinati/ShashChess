@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2021 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -60,28 +60,29 @@ public:
   Pawns::Table pawnsTable;
   Material::Table materialTable;
   size_t pvIdx, pvLast;
-  RunningAverage doubleExtensionAverage[COLOR_NB];
-  uint64_t nodesLastExplosive;
-  uint64_t nodesLastNormal;
+  RunningAverage complexityAverage;
+  RunningAverage lmrAverage;//lmr_average2
   std::atomic<uint64_t> nodes, tbHits, bestMoveChanges, bestMoveMc;//bmMovecountR7
-  Value bestValue;
   int selDepth, nmpMinPly;
   Color nmpColor;
-  ExplosionState state;
-
+  Value bestValue;//, optimism[COLOR_NB];
+  
+  bool nmpGuard; //from Crystal
   Position rootPos;
   StateInfo rootState;
   Search::RootMoves rootMoves;
-  Depth rootDepth, completedDepth;
+  Depth rootDepth, completedDepth, depth, previousDepth;
   Value rootDelta;
   CounterMoveHistory counterMoves;
   ButterflyHistory mainHistory;
-  LowPlyHistory lowPlyHistory;
   CapturePieceToHistory captureHistory;
   ContinuationHistory continuationHistory[2][2];
-  Score trend;
+  //Score trend;
   bool fullSearch;//full threads patch
-  int shashinValue, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;//shashinValue
+  //begin from Shashin
+  int shashinValue, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;
+  Key shashinPosKey;
+  //end from Shashin
  };
 
 
@@ -96,6 +97,7 @@ struct MainThread : public Thread {
 
   double previousTimeReduction;
   Value bestPreviousScore;
+  Value bestPreviousAverageScore;
   Value iterValue[4];
   int callsCnt;
   bool stopOnPonderhit;

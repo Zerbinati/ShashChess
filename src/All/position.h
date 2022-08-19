@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2021 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -126,12 +126,13 @@ public:
   Bitboard attackers_to(Square s) const;
   Bitboard attackers_to(Square s, Bitboard occupied) const;
   Bitboard slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const;
+  template<PieceType Pt> Bitboard attacks_by(Color c) const;
 
   // Properties of moves
   bool legal(Move m) const;
   bool pseudo_legal(const Move m) const;
   bool capture(Move m) const;
-  bool capture_or_promotion(Move m) const;
+  bool capture_or_promotion(Move m) const;//for Shashchess
   bool gives_check(Move m) const;
   Piece moved_piece(Move m) const;
   Piece captured_piece() const;
@@ -176,6 +177,7 @@ public:
   //from Crystal end
   int rule50_count() const;
   Score psq_score() const;
+  Value psq_eg_stm() const;
   Value non_pawn_material(Color c) const;
   Value non_pawn_material() const;
 
@@ -301,6 +303,22 @@ inline Bitboard Position::attackers_to(Square s) const {
   return attackers_to(s, pieces());
 }
 
+template<PieceType Pt>
+inline Bitboard Position::attacks_by(Color c) const {
+
+  if constexpr (Pt == PAWN)
+      return c == WHITE ? pawn_attacks_bb<WHITE>(pieces(WHITE, PAWN))
+                        : pawn_attacks_bb<BLACK>(pieces(BLACK, PAWN));
+  else
+  {
+      Bitboard threats = 0;
+      Bitboard attackers = pieces(c, Pt);
+      while (attackers)
+          threats |= attacks_bb<Pt>(pop_lsb(attackers), pieces());
+      return threats;
+  }
+}
+
 inline Bitboard Position::checkers() const {
   return st->checkersBB;
 }
@@ -340,6 +358,10 @@ inline Key Position::material_key() const {
 
 inline Score Position::psq_score() const {
   return psq;
+}
+
+inline Value Position::psq_eg_stm() const {
+  return (sideToMove == WHITE ? 1 : -1) * eg_value(psq);
 }
 
 inline Value Position::non_pawn_material(Color c) const {

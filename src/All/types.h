@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2021 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -110,6 +110,12 @@ typedef uint64_t Bitboard;
 constexpr int MAX_MOVES = 256;
 constexpr int MAX_PLY   = 246;
 
+//align score begin
+constexpr float CAOS_MAX_EVAL = 89.;
+constexpr float GUI_CAOS_EVAL = 32.;
+constexpr float WEIGHTED_EVAL=CAOS_MAX_EVAL/GUI_CAOS_EVAL;
+//align score end
+
 /// A move needs 16 bits to be stored
 ///
 /// bit  0- 5: destination square (from 0 to 63)
@@ -174,11 +180,6 @@ enum Bound {
   BOUND_UPPER,
   BOUND_LOWER,
   BOUND_EXACT = BOUND_UPPER | BOUND_LOWER
-};
-
-enum ExplosionState {
-  EXPLOSION_NONE,
-  MUST_CALM_DOWN
 };
 
 enum Value : int {
@@ -292,7 +293,7 @@ enum {
 //Positions-algorithms types
 enum {
   SHASHIN_POSITION_DEFAULT, SHASHIN_POSITION_PETROSIAN, SHASHIN_POSITION_CAPABLANCA, SHASHIN_POSITION_CAPABLANCA_PETROSIAN,
-  SHASHIN_POSITION_TAL,SHASHIN_POSITION_TAL_PETROSIAN,SHASHIN_POSITION_TAL_CAPABLANCA,SHASHIN_POSITION_TAL_CAPABLANCA_PETROSIAN
+  SHASHIN_POSITION_TAL,SHASHIN_POSITION_TAL_CAPABLANCA,SHASHIN_POSITION_TAL_CAPABLANCA_PETROSIAN
 };
 enum { SHASHIN_TAL_THRESHOLD = 35 * PawnValueEg/100, SHASHIN_CAPABLANCA_THRESHOLD = 15 * PawnValueEg/100};
 
@@ -471,7 +472,7 @@ constexpr Square to_sq(Move m) {
 }
 
 constexpr int from_to(Move m) {
- return m & 0xFFF;
+  return m & 0xFFF;
 }
 
 constexpr MoveType type_of(Move m) {

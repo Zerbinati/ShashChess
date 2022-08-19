@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2021 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -59,10 +59,8 @@ void on_live_book_retry(const Option& o) { Search::set_livebook_retry(o); }
 void on_livebook_depth(const Option& o) { Search::set_livebook_depth(o); }
 //livebook end
 //cerebellum+book begin
-void on_book_file(const Option& o) { polybook.init(o); }
-void on_book_file2(const Option& o) { polybook2.init(o); }
-void on_best_book_move(const Option& o) { polybook.set_best_book_move(o); }
-void on_book_depth(const Option& o) { polybook.set_book_depth(o); }
+void on_book1_file(const Option& o) { polybook[0].init(o); }
+void on_book2_file(const Option& o) { polybook[1].init(o); }
 //cerebellum+book end
 
 /// Our case insensitive less() function as required by UCI protocol
@@ -79,25 +77,25 @@ void init(OptionsMap& o) {
 
   constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
 
-  o["Debug Log File"]              << Option("", on_logger);
-  o["Threads"]               	   << Option(1, 1, 512, on_threads);
-  o["Hash"]                  	   << Option(16, 1, MaxHashMB, on_hash_size);
-  o["Clear Hash"]            	   << Option(on_clear_hash);
-  o["Ponder"]                	   << Option(false);
-  o["MultiPV"]               	   << Option(1, 1, 500);
-  o["Move Overhead"]         	   << Option(10, 0, 5000);
-  o["Slow Mover"]            	   << Option(100, 10, 1000);
-  o["UCI_Chess960"]          	   << Option(false);
-  o["UCI_AnalyseMode"]       	   << Option(false);
-  o["UCI_LimitStrength"]     	   << Option(false, on_UCI_LimitStrength);
-  o["Handicapped Depth"]     	   << Option(false);
-  o["LimitStrength_CB"]        << Option(false,on_LimitStrength_CB);
-  o["UCI_Elo"]                     << Option(2850, 1350, 2850);//handicap mode from ShashChess 
-  o["ELO_CB"]                  << Option(2850, 1350, 2850);//handicap mode from ShashChess 
+  o["Debug Log File"]        << Option("", on_logger);
+  o["Threads"]               << Option(1, 1, 512, on_threads);
+  o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
+  o["Clear Hash"]            << Option(on_clear_hash);
+  o["Ponder"]                << Option(false);
+  o["MultiPV"]               << Option(1, 1, 500);
+  o["Move Overhead"]         << Option(10, 0, 5000);
+  o["Slow Mover"]            << Option(100, 10, 1000);
+  o["UCI_Chess960"]          << Option(false);
+  o["UCI_LimitStrength"]     << Option(false, on_UCI_LimitStrength);
+  o["Handicapped Depth"]     << Option(false);
+  o["LimitStrength_CB"]      << Option(false,on_LimitStrength_CB);
+  o["UCI_Elo"]               << Option(2850, 1350, 2850);//handicap mode from ShashChess 
+  o["ELO_CB"]                << Option(2850, 1350, 2850);//handicap mode from ShashChess 
   o["UCI_ShowWDL"]           << Option(false);
-  o["SyzygyPath"]            	   << Option("<empty>", on_tb_path);
-  o["SyzygyProbeDepth"]            << Option(1, 1, 100);
-  o["SyzygyProbeLimit"]            << Option(7, 0, 7);
+  o["SyzygyPath"]            << Option("<empty>", on_tb_path);
+  o["Syzygy50MoveRule"]      << Option(true);
+  o["SyzygyProbeDepth"]      << Option(1, 1, 100);
+  o["SyzygyProbeLimit"]      << Option(7, 0, 7);
   o["Use NNUE"]              << Option(true, on_use_NNUE);
   // The default must follow the format nn-[SHA256 first 12 digits].nnue
   // for the build process (profile-build and fishtest) to work.
@@ -112,22 +110,33 @@ void init(OptionsMap& o) {
   o["Live Book Depth"]       << Option(100, 1, 100, on_livebook_depth);
   //livebook end
   //cerebellum book begin
-  o["BookFile"]              << Option("<empty>", on_book_file);
-  o["BookFile2"]             << Option("<empty>", on_book_file2);
-  o["BestBookMove"]          << Option(true, on_best_book_move);
-  o["BookDepth"]             << Option(255, 1, 255, on_book_depth);
+  o["Book1"]                             << Option(false);
+  o["Book1 File"]                        << Option("<empty>", on_book1_file);
+  o["Book1 BestBookMove"]                << Option(true);
+  o["Book1 Depth"]                       << Option(100, 1, 350);
+						 
+  o["Book2"]                             << Option(false);
+  o["Book2 File"]                        << Option("<empty>", on_book2_file);
+  o["Book2 BestBookMove"]                << Option(true);
+  o["Book2 Depth"]                       << Option(100, 1, 350);
   //cerebellum book end  
   o["Full depth threads"]    << Option(0, 0, 512, on_full_threads); //if this is used, must be after #Threads is set.
   o["Opening variety"]       << Option (0, 0, 40);
   o["Persisted learning"]    << Option("Off var Off var Standard var Self", "Off", on_persisted_learning);
   o["Read only learning"]    << Option(false, on_readonly_learning);
-  o["MCTS"]                  << Option("Off var Off var Single var Multi", "Off");
+  o["MCTS"]                  << Option(false);
+  o["MCTSThreads"]           << Option(1, 1, 512);
   o["Multi Strategy"]        << Option(20, 0, 100);
-  o["Multi MinVisits"]       << Option(5, 0, 1000);  
+  o["Multi MinVisits"]       << Option(5, 0, 1000);
   o["Concurrent Experience"] << Option (false);
-  o["Tal"]                   << Option(false);
+  o["GoldDigger"]            << Option(false); 
+  o["High Tal"]              << Option(false);
+  o["Middle Tal"]            << Option(false);
+  o["Low Tal"]               << Option(false);
   o["Capablanca"]            << Option(false);
-  o["Petrosian"]             << Option(false);
+  o["Low Petrosian"]         << Option(false);
+  o["Middle Petrosian"]      << Option(false);
+  o["High Petrosian"]        << Option(false);
 }
 
 
