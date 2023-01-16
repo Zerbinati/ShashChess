@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -69,9 +69,8 @@ namespace Stockfish {
 
 namespace {
 
-/// Version number. If Version is left empty, then compile date in the format
-/// DD-MM-YY and show in engine_info.
-const string Version = "23.1.1";
+/// Version number or dev.
+const string version = "27.1";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -203,23 +202,41 @@ namespace Utility
 }
 //end learning from Khalid
 
-/// engine_info() returns the full name of the current ShashChess version. This
-/// will be either "ShashChess <Tag> DD-MM-YY" (where DD-MM-YY is the date when
-/// the program was compiled) or "ShashChess <Version>", depending on whether
-/// Version is empty.
+/// engine_info() returns the full name of the current ShashChess version.
+/// For local dev compiles we try to append the commit sha and commit date
+/// from git if that fails only the local compilation date is set and "nogit" is specified:
+/// ShashChess dev-YYYYMMDD-SHA
+/// or
+/// ShashChess dev-YYYYMMDD-nogit
+///
+/// For releases (non dev builds) we only include the version number:
+/// ShashChess version
 
 string engine_info(bool to_uci) {
+  stringstream ss;
+  ss << "ShashChess " << version << setfill('0');
 
-  const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
-  string month, day, year;
-  stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
-
-  ss << "ShashChess " << Version << setfill('0');
-
-  if (Version.empty())
+  if (version == "dev")
   {
+      ss << "-";
+      #ifdef GIT_DATE
+      ss << GIT_DATE;
+      #else
+      const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+      string month, day, year;
+      stringstream date(__DATE__); // From compiler, format is "Sep 21 2008"
+
       date >> month >> day >> year;
-      ss << setw(2) << day << setw(2) << (1 + months.find(month) / 4) << year.substr(2);
+      ss << year << setw(2) << setfill('0') << (1 + months.find(month) / 4) << setw(2) << setfill('0') << day;
+      #endif
+
+      ss << "-";
+
+      #ifdef GIT_SHA
+      ss << GIT_SHA;
+      #else
+      ss << "nogit";
+      #endif
   }
 
   ss << (to_uci  ? "\nid author ": " by ")
@@ -443,10 +460,9 @@ void std_aligned_free(void* ptr) {
 
 #if defined(_WIN32)
 
-static void* aligned_large_pages_alloc_windows(size_t allocSize) {
+static void* aligned_large_pages_alloc_windows([[maybe_unused]] size_t allocSize) {
 
   #if !defined(_WIN64)
-    (void)allocSize; // suppress unused-parameter compiler warning
     return nullptr;
   #else
 
@@ -691,8 +707,7 @@ string argv0;            // path+name of the executable binary, as given by argv
 string binaryDirectory;  // path of the executable directory
 string workingDirectory; // path of the working directory
 
-void init(int argc, char* argv[]) {
-    (void)argc;
+void init([[maybe_unused]] int argc, char* argv[]) {
     string pathSeparator;
 
     // extract the path+name of the executable binary

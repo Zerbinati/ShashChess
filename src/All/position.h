@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -132,7 +132,7 @@ public:
   bool legal(Move m) const;
   bool pseudo_legal(const Move m) const;
   bool capture(Move m) const;
-  bool capture_or_promotion(Move m) const;//for Shashchess
+  bool capture_or_promotion(Move m) const;//for Shashchess captureOrPromotion and deeperPvS12 
   bool gives_check(Move m) const;
   Piece moved_piece(Move m) const;
   Piece captured_piece() const;
@@ -201,6 +201,8 @@ private:
   void move_piece(Square from, Square to);
   template<bool Do>
   void do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);
+  template<bool AfterMove>
+  Key adjust_key50(Key k) const;
 
   // Data members
   Piece board[SQUARE_NB];
@@ -219,7 +221,7 @@ private:
   bool isLeaf; //LeafDepth7
 };
 
-extern std::ostream& operator<<(std::ostream& os, const Position& pos);
+std::ostream& operator<<(std::ostream& os, const Position& pos);
 
 inline Color Position::side_to_move() const {
   return sideToMove;
@@ -344,8 +346,14 @@ inline int Position::pawns_on_same_color_squares(Color c, Square s) const {
 }
 
 inline Key Position::key() const {
-  return st->rule50 < 14 ? st->key
-                         : st->key ^ make_key((st->rule50 - 14) / 8);
+  return adjust_key50<false>(st->key);
+}
+
+template<bool AfterMove>
+inline Key Position::adjust_key50(Key k) const
+{
+  return st->rule50 < 14 - AfterMove
+      ? k : k ^ make_key((st->rule50 - (14 - AfterMove)) / 8);
 }
 
 inline Key Position::pawn_key() const {

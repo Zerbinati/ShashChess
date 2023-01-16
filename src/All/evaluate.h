@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -35,11 +35,12 @@ namespace Eval {
 
   extern bool useNNUE;
   extern std::string currentEvalFileName;
+  extern bool goldDigger;
 
   // The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
   // for the build process (profile-build and fishtest) to work. Do not change the
   // name of the macro, as it is used in the Makefile.
-  #define EvalFileDefaultName   "nn-ad9b42354671.nnue"
+  #define EvalFileDefaultName   "nn-a3dc078bafc7.nnue"
 
   namespace NNUE {
 

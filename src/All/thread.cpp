@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -60,17 +60,13 @@ void Thread::clear() {
   counterMoves.fill(MOVE_NONE);
   mainHistory.fill(0);
   captureHistory.fill(0);
-
   previousDepth = 0;
-  
+
   for (bool inCheck : { false, true })
       for (StatsType c : { NoCaptures, Captures })
-      {
           for (auto& to : continuationHistory[inCheck][c])
-                for (auto& h : to)
-                      h->fill(-71);
-          continuationHistory[inCheck][c][NO_PIECE][0]->fill(Search::CounterMovePruneThreshold - 1);
-      }
+              for (auto& h : to)
+                  h->fill(-71);
 }
 
 
@@ -216,7 +212,7 @@ void ThreadPool::start_thinking(Position& pos, StateListPtr& states,
   // since they are read-only.
   for (Thread* th : *this)
   {
-      th->nodes = th->tbHits = th->nmpMinPly = th->nmpGuard = th->bestMoveChanges = 0;
+      th->nodes = th->tbHits = th->nmpMinPly = th->nmpGuard = th->bestMoveChanges = 0; //from Crystal
       th->rootDepth = th->completedDepth = 0;
       th->rootMoves = rootMoves;
       th->rootPos.set(pos.fen(), pos.is_chess960(), &th->rootState, th);
@@ -237,11 +233,14 @@ Thread* ThreadPool::get_best_thread() const {
         minScore = std::min(minScore, th->rootMoves[0].score);
 
     // Vote according to score and depth, and select the best thread
-    for (Thread* th : *this)
-    {
-        votes[th->rootMoves[0].pv[0]] +=
-            (th->rootMoves[0].score - minScore + 14) * int(th->completedDepth);
+    auto thread_value = [minScore](Thread* th) {
+            return (th->rootMoves[0].score - minScore + 14) * int(th->completedDepth);
+        };
 
+    for (Thread* th : *this)
+        votes[th->rootMoves[0].pv[0]] += thread_value(th);
+
+    for (Thread* th : *this)
         if (abs(bestThread->rootMoves[0].score) >= VALUE_TB_WIN_IN_MAX_PLY)
         {
             // Make sure we pick the shortest mate / TB conversion or stave off mate the longest
@@ -250,9 +249,11 @@ Thread* ThreadPool::get_best_thread() const {
         }
         else if (   th->rootMoves[0].score >= VALUE_TB_WIN_IN_MAX_PLY
                  || (   th->rootMoves[0].score > VALUE_TB_LOSS_IN_MAX_PLY
-                     && votes[th->rootMoves[0].pv[0]] > votes[bestThread->rootMoves[0].pv[0]]))
+                     && (   votes[th->rootMoves[0].pv[0]] > votes[bestThread->rootMoves[0].pv[0]]
+                         || (   votes[th->rootMoves[0].pv[0]] == votes[bestThread->rootMoves[0].pv[0]]
+                             &&   thread_value(th) * int(th->rootMoves[0].pv.size() > 2)
+                                > thread_value(bestThread) * int(bestThread->rootMoves[0].pv.size() > 2)))))
             bestThread = th;
-    }
 
     return bestThread;
 }

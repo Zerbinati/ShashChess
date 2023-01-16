@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -53,10 +53,12 @@ void on_eval_file(const Option& ) { Eval::NNUE::init(); }
 void on_UCI_LimitStrength(const Option& ) { Eval::NNUE::init(); }
 void on_LimitStrength_CB(const Option& ) { Eval::NNUE::init(); }
 //livebook begin
+#ifdef USE_LIVEBOOK
 void on_livebook_url(const Option& o) { Search::setLiveBookURL(o); }
 void on_livebook_timeout(const Option& o) { Search::setLiveBookTimeout(o); }
 void on_live_book_retry(const Option& o) { Search::set_livebook_retry(o); }
 void on_livebook_depth(const Option& o) { Search::set_livebook_depth(o); }
+#endif
 //livebook end
 //cerebellum+book begin
 void on_book1_file(const Option& o) { polybook[0].init(o); }
@@ -78,7 +80,7 @@ void init(OptionsMap& o) {
   constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
 
   o["Debug Log File"]        << Option("", on_logger);
-  o["Threads"]               << Option(1, 1, 512, on_threads);
+  o["Threads"]               << Option(1, 1, 1024, on_threads);
   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
   o["Clear Hash"]            << Option(on_clear_hash);
   o["Ponder"]                << Option(false);
@@ -101,6 +103,7 @@ void init(OptionsMap& o) {
   // for the build process (profile-build and fishtest) to work.
   o["EvalFile"]              << Option(EvalFileDefaultName, on_eval_file);
   //livebook begin
+  #ifdef USE_LIVEBOOK
   o["Live Book"]             << Option(false);
   o["Live Book URL"]         << Option("http://www.chessdb.cn/cdb.php", on_livebook_url);
   o["Live Book Timeout"]     << Option(5000, 0, 10000, on_livebook_timeout);
@@ -108,6 +111,7 @@ void init(OptionsMap& o) {
   o["Live Book Diversity"]   << Option(false);
   o["Live Book Contribute"]  << Option(false);
   o["Live Book Depth"]       << Option(100, 1, 100, on_livebook_depth);
+  #endif
   //livebook end
   //cerebellum book begin
   o["Book1"]                             << Option(false);
@@ -124,11 +128,11 @@ void init(OptionsMap& o) {
   o["Opening variety"]       << Option (0, 0, 40);
   o["Persisted learning"]    << Option("Off var Off var Standard var Self", "Off", on_persisted_learning);
   o["Read only learning"]    << Option(false, on_readonly_learning);
-  o["MCTS"]                  << Option(false);
+  o["MCTS by Shashin"]       << Option(false);
   o["MCTSThreads"]           << Option(1, 1, 512);
   o["Multi Strategy"]        << Option(20, 0, 100);
   o["Multi MinVisits"]       << Option(5, 0, 1000);
-  o["Concurrent Experience"] << Option (false);
+  o["Concurrent Experience"] << Option (false); 
   o["GoldDigger"]            << Option(false); 
   o["High Tal"]              << Option(false);
   o["Middle Tal"]            << Option(false);
@@ -190,7 +194,7 @@ Option::operator double() const {
 }
 
 Option::operator std::string() const {
-  assert(type == "string" || type == "combo");
+  assert(type == "string" || type == "combo"); //ShashChess uci options
   return currentValue;
 }
 

@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -56,6 +56,7 @@ public:
   void start_searching();
   void wait_for_search_finished();
   size_t id() const { return idx; }
+  bool is_mcts() const { return isMCTS; }
 
   Pawns::Table pawnsTable;
   Material::Table materialTable;
@@ -65,24 +66,24 @@ public:
   std::atomic<uint64_t> nodes, tbHits, bestMoveChanges, bestMoveMc;//bmMovecountR7
   int selDepth, nmpMinPly;
   Color nmpColor;
-  Value bestValue;//, optimism[COLOR_NB];
+  Value bestValue, optimism[COLOR_NB];
   
   bool nmpGuard; //from Crystal
   Position rootPos;
   StateInfo rootState;
   Search::RootMoves rootMoves;
-  Depth rootDepth, completedDepth, depth, previousDepth;
+  Depth rootDepth, completedDepth, previousDepth;
   Value rootDelta;
   CounterMoveHistory counterMoves;
   ButterflyHistory mainHistory;
   CapturePieceToHistory captureHistory;
   ContinuationHistory continuationHistory[2][2];
-  //Score trend;
   bool fullSearch;//full threads patch
   //begin from Shashin
-  int shashinValue, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;
+  int shashinValue=0, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;
   Key shashinPosKey;
   //end from Shashin
+  bool isMCTS; //from montecarlo
  };
 
 
@@ -138,22 +139,6 @@ private:
 };
 
 extern ThreadPool Threads;
-
-/// Spinlock class is a yielding spin-lock (compatible with hyperthreading machines)
-
-class Spinlock {
-  std::atomic_int lock;
-
-public:
-  Spinlock() { lock = 1; }                  // Init here to workaround a bug with MSVC 2013
-  Spinlock(const Spinlock&) { lock = 1; };
-  void acquire() {
-      while (lock.fetch_sub(1, std::memory_order_acquire) != 1)
-          while(lock.load(std::memory_order_relaxed) <= 0)
-              std::this_thread::yield();  // Be nice to hyperthreading
-  }
-  void release() { lock.store(1, std::memory_order_release); }
-};
 
 } // namespace Stockfish
 

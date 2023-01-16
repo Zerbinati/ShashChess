@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -30,13 +30,12 @@ namespace Stockfish {
 class Position;
 
 namespace Search {
+
 //nodeTypeHistory begin
 // Different node types, used as a template parameter
 enum NodeType { NonPV, PV, Root };
 //nodeTypeHistory end
 
-/// Threshold used for countermoves based pruning
-constexpr int CounterMovePruneThreshold = 0;
 
 
 /// Stack struct keeps track of the information we need to remember from nodes
@@ -54,7 +53,6 @@ struct Stack {
   Depth depth;
   int statScore;
   int moveCount;
-  int distanceFromPv;//from Shashin
   bool inCheck;
   bool ttPv;
   bool ttHit;
@@ -81,6 +79,9 @@ struct RootMove {
   Value score = -VALUE_INFINITE;
   Value previousScore = -VALUE_INFINITE;
   Value averageScore = -VALUE_INFINITE;
+  Value uciScore = -VALUE_INFINITE;
+  bool scoreLowerbound = false;
+  bool scoreUpperbound = false;
   int selDepth = 0;
   int tbRank = 0;
   Value tbScore;
@@ -117,10 +118,12 @@ void init();
 void clear();
 
 //livebook begin
+#ifdef USE_LIVEBOOK
 void setLiveBookURL(const std::string &newURL);
 void setLiveBookTimeout(size_t newTimeoutMS);
 void set_livebook_retry(int retry);
 void set_livebook_depth(int book_depth);
+#endif
 //livebook end
 
 } // namespace Search

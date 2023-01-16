@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -220,7 +220,7 @@ namespace Stockfish::Eval::NNUE {
 
     buffer[0] = (v < 0 ? '-' : v > 0 ? '+' : ' ');
 
-    int cp = std::abs(100 * v / PawnValueEg);
+    int cp = std::abs(100 * v / NormalizeToPawnValue);
     if (cp >= 10000)
     {
         buffer[1] = '0' + cp / 10000; cp %= 10000;
@@ -251,7 +251,7 @@ namespace Stockfish::Eval::NNUE {
 
     buffer[0] = (v < 0 ? '-' : v > 0 ? '+' : ' ');
 
-    double cp = 1.0 * std::abs(int(v)) / PawnValueEg;
+    double cp = 1.0 * std::abs(int(v)) / NormalizeToPawnValue;
     sprintf(&buffer[1], "%6.2f", cp);
   }
 

@@ -1,6 +1,6 @@
 /*
  ShashChess, a UCI chess playing engine derived from Stockfish
- Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+ Copyright (C) 2004-2023 The Stockfish developers (see AUTHORS file)
 
  ShashChess is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -65,6 +65,7 @@ namespace Eval {
 
   bool useNNUE;
   string currentEvalFileName = "None";
+  bool goldDigger; //from Shashin
 
   /// NNUE::init() tries to load a NNUE network at startup time, or when the engine
   /// receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"
@@ -162,7 +163,7 @@ namespace Trace {
 
   Score scores[TERM_NB][COLOR_NB];
 
-  double to_cp(Value v) { return double(v) / PawnValueEg; }
+  double to_cp(Value v) { return double(v) / NormalizeToPawnValue; }
 
   void add(int idx, Color c, Score s) {
     scores[idx][c] = s;
@@ -990,7 +991,7 @@ namespace {
     // the position object (material + piece square tables) and the material
     // imbalance. Score is computed internally from the white point of view.
     //from handicap mode begin
-    Score score = pos.psq_score() + (imbalancesToEvaluate ? me->imbalance():0);//+ pos.this_thread()->trend;
+    Score score = pos.psq_score() + (imbalancesToEvaluate ? me->imbalance():0);
     // Probe the pawn hash table
     pe = Pawns::probe(pos);
     if (pawnsToEvaluate)
@@ -1087,55 +1088,55 @@ Value Eval::evaluate(const Position& pos, int* complexity) {
 
   Value v;
   Value psq = pos.psq_eg_stm();
-  // Deciding between classical and NNUE eval (~10 Elo): for high PSQ imbalance we use classical,
-  // but we switch to NNUE during long shuffling or with high material on the board.
-  bool useClassical =    (pos.this_thread()->depth > 9 || pos.count<ALL_PIECES>() > 7)
-                      && abs(psq) * 5 > (856 + pos.non_pawn_material() / 64) * (10 + pos.rule50_count());
 
-  // Deciding between classical and NNUE eval (~10 Elo): for high PSQ imbalance we use classical,
-  // but we switch to NNUE during long shuffling or with high material on the board.
-  if (!useNNUE || useClassical)
-  {
+  // We use the much less accurate but faster Classical eval when the NNUE
+  // option is set to false. Otherwise we use the NNUE eval unless the
+  // PSQ advantage is decisive and several pieces remain. (~3 Elo)
+  bool useClassical = !useNNUE || (pos.count<ALL_PIECES>() > 7 && abs(psq) > 1781);
+
+  if (useClassical)
       v = Evaluation<NO_TRACE>(pos).value();
-      useClassical = abs(v) >= 297;
-  }
-
-  // If result of a classical evaluation is much lower than threshold fall back to NNUE
-  if (useNNUE && !useClassical)
+  else
   {
-       int nnueComplexity;
-       int scale = 1064 + 106 * pos.non_pawn_material() / 5120;
-       //Color stm      = pos.side_to_move();
-       //Value optimism = pos.this_thread()->optimism[stm];
-       //Value psq      = (stm == WHITE ? 1 : -1) * eg_value(pos.psq_score());
-       //int complexity = 35 * abs(nnue - psq) / 256;
+      int nnueComplexity;
+      int scale = 1076 + 96 * pos.non_pawn_material() / 5120;
 
-       //optimism = optimism * (44 + complexity) / 32;
-       Value nnue = NNUE::evaluate(pos, true, &nnueComplexity);
-       // Blend nnue complexity with (semi)classical complexity
-       nnueComplexity = (104 * nnueComplexity + 131 * abs(nnue - psq)) / 256;
-       if (complexity) // Return hybrid NNUE complexity to caller
-           *complexity = nnueComplexity;
-       v = nnue * scale / 1024 ;
+      Color stm = pos.side_to_move();
+      Value optimism = pos.this_thread()->optimism[stm];
 
+      Value nnue = NNUE::evaluate(pos, true, &nnueComplexity);
+
+      // Blend nnue complexity with (semi)classical complexity
+      nnueComplexity = (  406 * nnueComplexity
+                        + 424 * abs(psq - nnue)
+                        + (optimism  > 0 ? int(optimism) * int(psq - nnue) : 0)
+                        ) / 1024;
+
+      // Return hybrid NNUE complexity to caller
+      if (complexity)
+          *complexity = nnueComplexity;
+
+      optimism = (pos.this_thread()->shashinValue==SHASHIN_POSITION_CAPABLANCA)? 
+                    (Value)0: (optimism * (272 + nnueComplexity) / 256); //optimism by Shashin
+      v = (nnue * scale + optimism * (scale - 748)) / 1024;
   }
 
   // Damp down the evaluation linearly when shuffling
-  v = v * (195 - pos.rule50_count()) / 211;
+  v = v * (200 - pos.rule50_count()) / 214;
 
   // Guarantee evaluation does not hit the tablebase range
   v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
   //std::cout << pos.fen() ;
   //printf("Value: %d",v);
   // When not using NNUE, return classical complexity to caller
-  if (complexity && (!useNNUE || useClassical))
-       *complexity = abs(v - psq);
-  bool goldDigger = Options["GoldDigger"];
+  if (complexity && useClassical)
+      *complexity = abs(v - psq);
+
   if(goldDigger)
   {
       v = (Value)((float)(v) / WEIGHTED_EVAL);
   }
-  return v; 
+  return v;
 }
 
 /// trace() is like evaluate(), but instead of returning a value, it returns
@@ -1154,12 +1155,11 @@ std::string Eval::trace(Position& pos) {
   Value v;
 
   std::memset(scores, 0, sizeof(scores));
+
   // Reset any global variable used in eval
-  pos.this_thread()->depth           = 0;
-  //pos.this_thread()->trend = SCORE_ZERO; // Reset any dynamic contempt
-  pos.this_thread()->bestValue = VALUE_ZERO; // Reset bestValue for lazyEval
-  //pos.this_thread()->optimism[WHITE] = VALUE_ZERO;
-  //pos.this_thread()->optimism[BLACK] = VALUE_ZERO;
+  pos.this_thread()->bestValue       = VALUE_ZERO;
+  pos.this_thread()->optimism[WHITE] = VALUE_ZERO;
+  pos.this_thread()->optimism[BLACK] = VALUE_ZERO;
 
   v = Evaluation<TRACE>(pos).value();
 
