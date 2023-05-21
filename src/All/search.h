@@ -31,12 +31,6 @@ class Position;
 
 namespace Search {
 
-//nodeTypeHistory begin
-// Different node types, used as a template parameter
-enum NodeType { NonPV, PV, Root };
-//nodeTypeHistory end
-
-
 
 /// Stack struct keeps track of the information we need to remember from nodes
 /// shallower and deeper in the tree during the search. Each search thread has
@@ -50,15 +44,14 @@ struct Stack {
   Move excludedMove;
   Move killers[2];
   Value staticEval;
-  Depth depth;
   int statScore;
   int moveCount;
   bool inCheck;
   bool ttPv;
   bool ttHit;
+  bool secondaryLine; //from Crystal
   int doubleExtensions;
   int cutoffCnt;
-  NodeType nodeType; //nodeTypeHistory
 };
 
 
@@ -88,7 +81,7 @@ struct RootMove {
   std::vector<Move> pv;
 };
 
-typedef std::vector<RootMove> RootMoves;
+using RootMoves = std::vector<RootMove>;
 
 
 /// LimitsType struct stores information sent by GUI about available time to
@@ -136,4 +129,5 @@ size_t cURL_WriteFunc(void *contents, size_t size, size_t nmemb, std::string *s)
 //from Montecarlo end
 Value static_value(Position &pos, Search::Stack *ss);
 } // namespace Stockfish
+
 #endif // #ifndef SEARCH_H_INCLUDED

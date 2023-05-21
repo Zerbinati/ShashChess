@@ -29,9 +29,12 @@
 #include "search.h"
 #include "thread.h"
 #include "timeman.h"
+#include "tt.h"
 #include "learn.h"
 #include "uci.h"
+#include "book/book.h"
 #include "syzygy/tbprobe.h"
+#include "nnue/evaluate_nnue.h"
 
 using namespace std;
 
@@ -234,11 +237,11 @@ namespace {
      // The coefficients of a third-order polynomial fit is based on the fishtest data
      // for two parameters that need to transform eval to the argument of a logistic
      // function.
-     constexpr double as[] = {  -0.58270499,    2.68512549,   15.24638015,  344.49745382};
-     constexpr double bs[] = {  -2.65734562,   15.96509799,  -20.69040836,   73.61029937 };
+     constexpr double as[] = {   0.33677609,   -4.30175627,   33.08810557,  365.60223431};
+     constexpr double bs[] = {  -2.50471102,   14.23235405,  -14.33066859,   71.42705250 };
 
      // Enforce that NormalizeToPawnValue corresponds to a 50% win rate at ply 64
-     static_assert(NormalizeToPawnValue == int(as[0] + as[1] + as[2] + as[3]));
+     static_assert(UCI::NormalizeToPawnValue == int(as[0] + as[1] + as[2] + as[3]));
 
      double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
      double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
@@ -347,6 +350,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "bench")    bench(pos, is, states);
       else if (token == "d")        sync_cout << pos << sync_endl;
       else if (token == "eval")     trace_eval(pos);
+      else if (token == "book")    Book::show_moves(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
       else if (token == "export_net")
       {
@@ -394,8 +398,44 @@ string UCI::value(Value v) {
 
   return ss.str();
 }
-
-
+//for Shashin theory begin
+uint8_t UCI::getWinProbability(Value v, int ply)
+{
+  double correctionFactor = (std::min(240, ply) / 64.0);
+  double forExp1 =
+      ((((0.3367760 * correctionFactor +
+          -4.30175627) *
+             correctionFactor +
+         33.08810557) *
+        correctionFactor) +
+       365.60223431);
+  double forExp2 =
+      (((-2.50471102 * correctionFactor +
+         15.96509799) *
+            correctionFactor +
+        -14.33066859) *
+       correctionFactor);
+  double forExp3 = forExp2 + 71.42705250;
+  double winrateToMove =
+      double(0.5 +
+             1000 / (1 +
+                     std::
+                         exp((forExp1 -
+                              (std::clamp(double(v), -4000.0,
+                                          4000.0))) /
+                             forExp3)));
+  double winrateOpponent =
+      double(0.5 +
+             1000 / (1 +
+                     std::
+                         exp((forExp1 -
+                              (std::clamp(double(-v), -4000.0,
+                                          4000.0))) /
+                             forExp3)));
+  double winrateDraw = 1000 - winrateToMove - winrateOpponent;
+  return static_cast<uint8_t>(round((winrateToMove + winrateDraw / 2.0) / 10.0));
+}
+//for Shashin theory end
 /// UCI::wdl() reports the win-draw-loss (WDL) statistics given an evaluation
 /// and a game ply based on the data gathered for fishtest LTC games.
 
@@ -426,14 +466,14 @@ std::string UCI::square(Square s) {
 
 string UCI::move(Move m, bool chess960) {
 
-  Square from = from_sq(m);
-  Square to = to_sq(m);
-
   if (m == MOVE_NONE)
       return "(none)";
 
   if (m == MOVE_NULL)
       return "0000";
+
+  Square from = from_sq(m);
+  Square to = to_sq(m);
 
   if (type_of(m) == CASTLING && !chess960)
       to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));

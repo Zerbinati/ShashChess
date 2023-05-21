@@ -135,12 +135,12 @@ window.
 #### Handicapped Depth
 The engine stop calculating when it joins the handicapped depth, based on the following table:
 
-Elo range | Handicapped Depth |
-| ------ | ------ |
-| [0,1999] | [1,6] |
-| [2000,2199] | [7,9] |
-| [2200,2399] | [10,12] |
-| [2400,2850] | [13,20] |
+Elo range     | Handicapped Depth |
+| ----------- | ----------------- |
+| [0,1999]    | [1,6]             |
+| [2000,2199] | [7,9]             |
+| [2200,2399] | [10,12]           |
+| [2400,3190] | [13,20]           |
 
 
 ### Sygyzy End Game table bases
@@ -188,14 +188,15 @@ The number of settled threads to use for a full depth brute force search.
 If the number is greater than threads number, all threads are for full depth brute force search.
 
 ### MonteCarlo Tree Search section (experimental: thanks to original Stephan Nicolet work)
+#### MCTS (checkbox)
 
-_Boolean, Default: False_ If activated, thanks to Shashin theory, the engine will use the MonteCarlo Tree Search for Capablanca quiescent type positions and also for caos ones, in the manner specified by the following parameters. The idea is to exploit Lc0 best results in those positions types, because Lc0 uses mcts in the search.
+_Boolean, Default: False_ If activated, the engine uses the MonteCarlo Tree Search in the manner specified by the following parameters.
 
 #### MCTSThreads
 
 _Integer, Default: 0, Min: 0, Max: 512_
 The number of settled threads to use for MCTS search except the first (main) one always for alpha-beta search. 
-In particular, if the number is greater than threads number, they will all do a montecarlo tree search, always except the first (main) for alpha-beta search. As a golden rule, for best results, do not exceed 8/11 of the threads set
+In particular, if the number is greater than threads number, they will all do a montecarlo tree search, always except the first (main) for alpha-beta search.
 
 #### Multi Strategy 
 
@@ -207,39 +208,35 @@ Only in multi mcts mode, for tree policy.
 _Integer, Default: 5, Min: 0, Max: 1000_
 Only in multi mcts mode, for Upper Confidence Bound.
 
-### Live Book section (thanks to Eman's author Khalid Omar for windows builds)
+### Book management section (thanks to Khalid Omar)
+The order is: bin->ctg->live book
 
-#### Live Book (checkbox)
+#### CTG/BIN Book 1 File
+The file name of the first book file which could be a polyglot (BIN) or Chessbase (CTG) book. To disable this book, use: ```<empty>```
+If the book (CTG or BIN) is in a different directory than the engine executable, then configure the full path of the book file, example:
+```C:\Path\To\My\Book.ctg``` or ```/home/username/path/to/book/bin```
 
-_Boolean, Default: False_ If activated, the engine uses the livebook as primary choice.
+#### Book 1 Width
+The number of moves to consider from the book for the same position. To play best book move, set this option to ```1```. If a value ```n``` (greater than ```1```) is configured, the engine will pick **randomly** one of the top ```n``` moves available in the book for the given position
 
-#### Live Book URL
-The default is the online chessdb [https://www.chessdb.cn/queryc_en/](https://www.chessdb.cn/queryc_en/), a wonderful project by noobpwnftw (thanks to him!)
- 
-[https://github.com/noobpwnftw/chessdb](https://github.com/noobpwnftw/chessdb)
-[http://talkchess.com/forum3/viewtopic.php?f=2&t=71764&hilit=chessdb](http://talkchess.com/forum3/viewtopic.php?f=2&t=71764&hilit=chessdb)
+#### Book 1 Depth
+The maximum number of moves to play from the book
+	
+#### (CTG) Book 1 Only Green
+This option is only used if the loaded book is a CTG book. When set to ```true```, the engine will only play Green moves from the book (if any). If no green moves found, then no book move is made
+This option has no effect or use if the loaded book is a Polyglot (BIN) book
+    
+#### CTG/BIN Book 2 File
+Same explaination as **CTG/BIN Book 1 File**, but for the second book
 
-The private application can also learn from this live db.
+#### Book 2 Width
+Same explaination as **BIN Book 1 Width**, but for the second book
 
-#### Live Book Timeout
+#### Book 2 Depth
+Same explaination as **BIN Book 1 Depth**, but for the second book
 
-_Default 5000, min 0, max 10000_ Only for bullet games, use a lower value, for example, 1500.
-
-#### Live Book Retry
-
-_Default 3, min 1, max 100_ Max times the engine tries to contribute (if the corresponding option is activated: see below) to the live book. If 0, the engine doesn't use the livebook.
-
-#### Live Book Diversity
-
-_Boolean, Default: False_ If activated, the engine varies its play, reducing conversely its strength because already the live chessdb is very large.
-
-#### Live Book Contribute
-
-_Boolean, Default: False_ If activated, the engine sends a move, not in live chessdb, in its queue to be analysed. In this manner, we have a kind of learning cloud.
-
-#### Live Book Depth
-
-_Default 100, min 1, max 100_ Depth of live book moves.
+#### (CTG) Book 2 Only Green
+Same explaination as **(CTG) Book 1 Only Green**, but for the second book
 
 ### Full depth threads
 
@@ -299,31 +296,33 @@ If activated, the learning file is only read.
 
 ### Shashin section
 
-### Shashin section
-
-### Shashin section
-
 _Default: no option settled_
 The engine will determine dynamically the position's type starting from a "Capablanca/default
 positions".
 If one or more (mixed algorithms/positions types at the boundaries) of the seven following options
 are settled, it will force the initial position/algorithm understanding
+If, in the wdl model, we define wdl_w=Win percentage, wdl_d=Drawn percentage and Win probability=(2*wdl_w+wdl_d)/10, 
+we have the following mapping:
 
-Centipawns range | Shashin position’s type        |
-| ---------------| ------------------------------ |
-| <= -160        | High Petrosian                 |
-| [-159, -93]    | Middle-High Petrosian          |
-| [-92, -59]     | Middle Petrosian               |
-| [-58, -41]     | Middle-Low Petrosian           |
-| [-40, -20]     | Low Petrosian                  |
-| [-19, -9]      | Caos: Capablanca-Low Petrosian |
-| [-8,8]         | Capablanca                     |
-| [9, 19]        | Caos: Capablanca-Low Tal       |
-| [20,40]        | Low Tal                        |
-| [41,58]        | Low-Middle Tal                 |
-| [59,92]        | Middle Tal                     |
-| [93,159]       | Middle-High Tal                |
-| >= 160         | High Tal                       |
+Win probability range | Shashin position’s type        | Informator symbols    | 
+| --------------------| ------------------------------ | ----------------------|
+| [0, 4]              | High Petrosian                 | -+                    | 
+| [5, 9]              | Middle-High Petrosian          | -+ \ -/+              |
+| [10,12]             | Middle Petrosian               | -/+                   |  
+| [13,19]             | Middle-Low Petrosian           | -/+ \ =/+             |
+| [20,24]             | Low Petrosian                  | =/+                   |
+| [25,49]             | Caos: Capablanca-Low Petrosian | =/+ \ =               |
+| [50]                | Capablanca                     | =                     |
+| [51,75]             | Caos: Capablanca-Low Tal       | = \ +/=               | 
+| [76,80]             | Low Tal                        | +/=                   |
+| [81,87]             | Low-Middle Tal                 | +/= | +/-             |
+| [88,90]             | Middle Tal                     | +/-                   |
+| [91,95]             | Middle-High Tal                | +/- \ +-              |
+| [96,100]            | High Tal                       | +-                    | 
+
+N.B.
+The winProbability also take into account the depth at which a move has been calculated.
+So, it's more effective than the cp. 
 
 #### Tal
 
@@ -495,6 +494,9 @@ Currently, Stockfish has the following UCI options:
     Lower values will make Stockfish take less time in games, higher values will
     make it think longer.
 
+  * ####  Minimum Thinking Time (old Stockfish option restored)
+	Search for at least x ms per move.
+	
   * #### nodestime
     Tells the engine to use nodes searched instead of wall time to account for
     elapsed time. Useful for engine testing.

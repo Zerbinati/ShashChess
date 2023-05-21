@@ -142,7 +142,7 @@ struct SparseEntry {
 
 static_assert(sizeof(SparseEntry) == 6, "SparseEntry must be 6 bytes");
 
-typedef uint16_t Sym; // Huffman symbol
+using Sym = uint16_t; // Huffman symbol
 
 struct LR {
     enum Side { Left, Right };
@@ -234,7 +234,7 @@ public:
         }
 #else
         // Note FILE_FLAG_RANDOM_ACCESS is only a hint to Windows and as such may get ignored.
-        HANDLE fd = CreateFile(fname.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        HANDLE fd = CreateFileA(fname.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, nullptr);
 
         if (fd == INVALID_HANDLE_VALUE)
@@ -327,7 +327,7 @@ struct PairsData {
 // first access, when the corresponding file is memory mapped.
 template<TBType Type>
 struct TBTable {
-    typedef typename std::conditional<Type == WDL, WDLScore, int>::type Ret;
+    using Ret = typename std::conditional<Type == WDL, WDLScore, int>::type;
 
     static constexpr int Sides = Type == WDL ? 2 : 1;
 

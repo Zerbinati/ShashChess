@@ -56,19 +56,17 @@ public:
   void start_searching();
   void wait_for_search_finished();
   size_t id() const { return idx; }
-  bool is_mcts() const { return isMCTS; }
+  bool is_mcts() const { return isMCTS; } //montecarlo
 
   Pawns::Table pawnsTable;
   Material::Table materialTable;
   size_t pvIdx, pvLast;
-  RunningAverage complexityAverage;
-  RunningAverage lmrAverage;//lmr_average2
-  std::atomic<uint64_t> nodes, tbHits, bestMoveChanges, bestMoveMc;//bmMovecountR7
-  int selDepth, nmpMinPly, failedHighCnt;//fhcRnNegExt
-  Color nmpColor;
+  std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
+  int selDepth, nmpMinPly, nmpSide;//crystal
   Value bestValue, optimism[COLOR_NB];
+  Value pvValue;//from Crystal
   
-  bool nmpGuard; //from Crystal
+  bool nmpGuard,nmpGuardV; //from Crystal
   Position rootPos;
   StateInfo rootState;
   Search::RootMoves rootMoves;
@@ -80,8 +78,9 @@ public:
   ContinuationHistory continuationHistory[2][2];
   bool fullSearch;//full threads patch
   //begin from Shashin
-  int shashinValue=0, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;
+  int shashinWinProbabilityRange=0, shashinQuiescentCapablancaMiddleHighScore, shashinQuiescentCapablancaMaxScore;
   Key shashinPosKey;
+  Depth shashinDepth=0;
   //end from Shashin
   bool isMCTS; //from montecarlo
  };

@@ -36,7 +36,7 @@
 #include "timeman.h"
 #include "uci.h"
 #include "incbin/incbin.h"
-
+#include "nnue/evaluate_nnue.h"
 
 // Macro to embed the default efficiently updatable neural network (NNUE) file
 // data in the engine binary (using incbin.h, by Dale Weiler).
@@ -85,8 +85,6 @@ namespace Eval {
         eval_file = EvalFileDefaultName;
 
     #if defined(DEFAULT_NNUE_DIRECTORY)
-    #define stringify2(x) #x
-    #define stringify(x) stringify2(x)
     vector<string> dirs = { "<internal>" , "" , CommandLine::binaryDirectory , stringify(DEFAULT_NNUE_DIRECTORY) };
     #else
     vector<string> dirs = { "<internal>" , "" , CommandLine::binaryDirectory };
@@ -98,7 +96,7 @@ namespace Eval {
             if (directory != "<internal>")
             {
                 ifstream stream(directory + eval_file, ios::binary);
-                if (load_eval(eval_file, stream))
+                if (NNUE::load_eval(eval_file, stream))
                     currentEvalFileName = eval_file;
             }
 
@@ -114,7 +112,7 @@ namespace Eval {
                 (void) gEmbeddedNNUEEnd; // Silence warning on unused variable
 
                 istream stream(&buffer);
-                if (load_eval(eval_file, stream))
+                if (NNUE::load_eval(eval_file, stream))
                     currentEvalFileName = eval_file;
             }
         }
@@ -162,7 +160,7 @@ namespace Trace {
 
   Score scores[TERM_NB][COLOR_NB];
 
-  static double to_cp(Value v) { return double(v) / NormalizeToPawnValue; }
+  static double to_cp(Value v) { return double(v) / UCI::NormalizeToPawnValue; }
 
   static void add(int idx, Color c, Score s) {
     scores[idx][c] = s;
@@ -196,8 +194,8 @@ using namespace Trace;
 namespace {
 
   // Threshold for lazy and space evaluation
-  constexpr Value LazyThreshold1    =  Value(3631);
-  constexpr Value LazyThreshold2    =  Value(2084);
+  constexpr Value LazyThreshold1    =  Value(3622);
+  constexpr Value LazyThreshold2    =  Value(1962);
   constexpr Value SpaceThreshold    =  Value(11551);
 
   // KingAttackWeights[PieceType] contains king attack weights by piece type
@@ -427,7 +425,7 @@ namespace {
         else if (Pt == ROOK && (file_bb(s) & kingRing[Them]))
             score += RookOnKingRing;
 
-        else if (((Pt == BISHOP) && (attacks_bb<BISHOP>(s, pos.pieces(PAWN)) & kingRing[Them])&& (pos.this_thread()->shashinValue != SHASHIN_POSITION_CAPABLANCA))) //from Official integrated with Shashin
+        else if (Pt == BISHOP && (attacks_bb<BISHOP>(s, pos.pieces(PAWN)) & kingRing[Them]))
             score += BishopOnKingRing;
 
         int mob = popcount(b & mobilityArea[Us]);
@@ -797,13 +795,11 @@ namespace {
                 if (!(pos.pieces(Them) & bb))
                     unsafeSquares &= attackedBy[Them][ALL_PIECES] | pos.pieces(Them);
 
-                constexpr Bitboard Goal = Rank1BB | Rank8BB; //secured-passer
-
                 // If there are no enemy pieces or attacks on passed pawn span, assign a big bonus.
                 // Or if there is some, but they are all attacked by our pawns, assign a bit smaller bonus.
                 // Otherwise assign a smaller bonus if the path to queen is not attacked
                 // and even smaller bonus if it is attacked but block square is not.
-                int k = !unsafeSquares                    ? (attackedBy[Us][ALL_PIECES] & squaresToQueen & Goal) ? 42 : 36 : //secured-passer
+                int k = !unsafeSquares                    ? 36 :
                 !(unsafeSquares & ~attackedBy[Us][PAWN])  ? 30 :
                         !(unsafeSquares & squaresToQueen) ? 17 :
                         !(unsafeSquares & blockSq)        ?  7 :
@@ -1004,25 +1000,9 @@ namespace {
                                                         + std::abs(pos.this_thread()->bestValue) * 5 / 4
                                                         + pos.non_pawn_material() / 32;
     };
-    //LeafDepth7 begin
-    if(pos.this_thread()->shashinValue==SHASHIN_POSITION_CAPABLANCA)
-    {
-	    if (lazy_skip(LazyThreshold1))
-	        goto make_v;
 
-    }
-    else
-    {
-	if(!T)
-	{
-	    //No lazy eval from UCI
-	    if( pos.is_leaf()){
-		    if (lazy_skip(LazyThreshold1))
-		        goto make_v;
-		}
-	}
-    }
-    //LeafDepth7 end
+    if (lazy_skip(LazyThreshold1))
+        goto make_v;
 
     // Main evaluation begins here
     initialize<WHITE>();
@@ -1083,22 +1063,24 @@ make_v:
 /// evaluate() is the evaluator for the outer world. It returns a static
 /// evaluation of the position from the point of view of the side to move.
 
-Value Eval::evaluate(const Position& pos, int* complexity) {
+Value Eval::evaluate(const Position& pos) {
+
+  assert(!pos.checkers());
 
   Value v;
   Value psq = pos.psq_eg_stm();
 
   // We use the much less accurate but faster Classical eval when the NNUE
   // option is set to false. Otherwise we use the NNUE eval unless the
-  // PSQ advantage is decisive and several pieces remain. (~3 Elo)
-  bool useClassical = !useNNUE || (pos.count<ALL_PIECES>() > 7 && abs(psq) > 1781);
+  // PSQ advantage is decisive. (~4 Elo at STC, 1 Elo at LTC)
+  bool useClassical = !useNNUE || abs(psq) > 2048;
 
   if (useClassical)
       v = Evaluation<NO_TRACE>(pos).value();
   else
   {
       int nnueComplexity;
-      int scale = 1076 + 96 * pos.non_pawn_material() / 5120;
+      int scale = 967 + pos.non_pawn_material() / 64;
 
       Color stm = pos.side_to_move();
       Value optimism = pos.this_thread()->optimism[stm];
@@ -1106,18 +1088,12 @@ Value Eval::evaluate(const Position& pos, int* complexity) {
       Value nnue = NNUE::evaluate(pos, true, &nnueComplexity);
 
       // Blend nnue complexity with (semi)classical complexity
-      nnueComplexity = (  406 * nnueComplexity
-                        + 424 * abs(psq - nnue)
-                        + (optimism  > 0 ? int(optimism) * int(psq - nnue) : 0)
+      nnueComplexity = (  402 * nnueComplexity
+                        + (454 + optimism) * abs(psq - nnue)
                         ) / 1024;
 
-      // Return hybrid NNUE complexity to caller
-      if (complexity)
-          *complexity = nnueComplexity;
-
-      optimism = (pos.this_thread()->shashinValue==SHASHIN_POSITION_CAPABLANCA)? 
-                    (Value)0: (optimism * (272 + nnueComplexity) / 256); //optimism by Shashin
-      v = (nnue * scale + optimism * (scale - 748)) / 1024;
+      optimism = optimism * (274 + nnueComplexity) / 256;
+      v = (nnue * scale + optimism * (scale - 791)) / 1024;
   }
 
   // Damp down the evaluation linearly when shuffling
@@ -1125,11 +1101,6 @@ Value Eval::evaluate(const Position& pos, int* complexity) {
 
   // Guarantee evaluation does not hit the tablebase range
   v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-  //std::cout << pos.fen() ;
-  //printf("Value: %d",v);
-  // When not using NNUE, return classical complexity to caller
-  if (complexity && useClassical)
-      *complexity = abs(v - psq);
 
   return v;
 }

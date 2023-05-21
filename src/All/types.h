@@ -104,8 +104,8 @@ constexpr bool Is64Bit = true;
 constexpr bool Is64Bit = false;
 #endif
 
-typedef uint64_t Key;
-typedef uint64_t Bitboard;
+using Key = uint64_t;
+using Bitboard = uint64_t;
 
 constexpr int MAX_MOVES = 256;
 constexpr int MAX_PLY   = 246;
@@ -138,7 +138,7 @@ enum Color {
   WHITE, BLACK, COLOR_NB = 2
 };
 
-constexpr Color Colors[2] = {WHITE, BLACK};
+constexpr Color Colors[2] = {WHITE, BLACK};//kelly
 
 enum CastlingRights {
   NO_CASTLING,
@@ -198,13 +198,7 @@ enum Value : int {
   RookValueMg   = 1276,  RookValueEg   = 1380,
   QueenValueMg  = 2538,  QueenValueEg  = 2682,
 
-  MidgameLimit  = 15258, EndgameLimit  = 3915,
-  // Normalizes the internal value as reported by evaluate or search
-  // to the UCI centipawn result used in output. This value is derived from
-  // the win_rate_model() such that Stockfish outputs an advantage of
-  // "100 centipawns" for a position if the engine has a 50% probability to win
-  // from this position in selfplay at fishtest LTC time control.
-  NormalizeToPawnValue = 361 // from official here
+  MidgameLimit  = 15258, EndgameLimit  = 3915
 };
 
 enum PieceType {
@@ -227,7 +221,7 @@ constexpr Value PieceValue[PHASE_NB][PIECE_NB] = {
     VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg, VALUE_ZERO, VALUE_ZERO }
 };
 
-typedef int Depth;
+using Depth = int;
 
 enum : int {
   DEPTH_QS_CHECKS     =  0,
@@ -274,7 +268,6 @@ enum Rank : int {
   RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8, RANK_NB
 };
 
-
 // Keep track of what a move changes on the board (used by NNUE)
 struct DirtyPiece {
 
@@ -292,44 +285,38 @@ struct DirtyPiece {
 };
 
 // Shashin section
-//align score begin for GD
-constexpr float CAOS_MAX_EVAL = 71.;
-constexpr float GUI_CAOS_EVAL = 19.;
-constexpr float WEIGHTED_EVAL=CAOS_MAX_EVAL/GUI_CAOS_EVAL;
-//align score end for GD
-//to eliminate in the future begin
-enum
-{
-SHASHIN_QUIESCENT_MAX_SCORE = (int)((float)289 * WEIGHTED_EVAL),
-SHASHIN_QUIESCENT_MIDDLE_HIGH_SCORE = (int)((float)143 * WEIGHTED_EVAL)
-};
-//to eliminate in the future end
 // Positions-algorithms types
 enum
 {
-  SHASHIN_POSITION_TAL_CAPABLANCA_PETROSIAN,
-  SHASHIN_POSITION_HIGH_PETROSIAN,
-  SHASHIN_POSITION_MIDDLE_HIGH_PETROSIAN,
-  SHASHIN_POSITION_MIDDLE_PETROSIAN,
-  SHASHIN_POSITION_MIDDLE_LOW_PETROSIAN,
-  SHASHIN_POSITION_LOW_PETROSIAN,
-  SHASHIN_POSITION_CAPABLANCA_PETROSIAN,
-  SHASHIN_POSITION_CAPABLANCA,
-  SHASHIN_POSITION_CAPABLANCA_TAL,
-  SHASHIN_POSITION_LOW_TAL,
-  SHASHIN_POSITION_MIDDLE_LOW_TAL,
-  SHASHIN_POSITION_MIDDLE_TAL,
-  SHASHIN_POSITION_MIDDLE_HIGH_TAL,
-  SHASHIN_POSITION_HIGH_TAL
+  SHASHIN_POSITION_TAL_CAPABLANCA_PETROSIAN=7,
+  SHASHIN_POSITION_HIGH_PETROSIAN=-6,
+  SHASHIN_POSITION_MIDDLE_HIGH_PETROSIAN=-5,
+  SHASHIN_POSITION_MIDDLE_PETROSIAN=-4,
+  SHASHIN_POSITION_MIDDLE_LOW_PETROSIAN=-3,
+  SHASHIN_POSITION_LOW_PETROSIAN=-2,
+  SHASHIN_POSITION_CAPABLANCA_PETROSIAN=-1,
+  SHASHIN_POSITION_CAPABLANCA=0,
+  SHASHIN_POSITION_CAPABLANCA_TAL=1,
+  SHASHIN_POSITION_LOW_TAL=2,
+  SHASHIN_POSITION_MIDDLE_LOW_TAL=3,
+  SHASHIN_POSITION_MIDDLE_TAL=4,
+  SHASHIN_POSITION_MIDDLE_HIGH_TAL=5,
+  SHASHIN_POSITION_HIGH_TAL=6
 };
 enum
 {
-  SHASHIN_CAPABLANCA_THRESHOLD = (int)((float)31 * WEIGHTED_EVAL),
-  SHASHIN_LOW_TAL_THRESHOLD = (int)((float)73 * WEIGHTED_EVAL),
-  SHASHIN_MIDDLE_LOW_TAL_THRESHOLD = (int)((float)148 * WEIGHTED_EVAL),
-  SHASHIN_MIDDLE_TAL_THRESHOLD = (int)((float)212 * WEIGHTED_EVAL),
-  SHASHIN_MIDDLE_HIGH_TAL_THRESHOLD = (int)((float)335 * WEIGHTED_EVAL),
-  SHASHIN_HIGH_TAL_THRESHOLD = (int)((float)577 * WEIGHTED_EVAL)
+  SHASHIN_LOW_TAL_THRESHOLD = 76,
+  SHASHIN_MIDDLE_LOW_TAL_THRESHOLD = 81,
+  SHASHIN_MIDDLE_TAL_THRESHOLD = 88,
+  SHASHIN_MIDDLE_HIGH_TAL_THRESHOLD = 91,
+  SHASHIN_HIGH_TAL_THRESHOLD = 96,
+  SHASHIN_CAPABLANCA_THRESHOLD = 51,
+  SHASHIN_LOW_PETROSIAN_THRESHOLD = 100-SHASHIN_LOW_TAL_THRESHOLD,
+  SHASHIN_MIDDLE_LOW_PETROSIAN_THRESHOLD = 100-SHASHIN_MIDDLE_LOW_TAL_THRESHOLD,
+  SHASHIN_MIDDLE_PETROSIAN_THRESHOLD = 100-SHASHIN_MIDDLE_TAL_THRESHOLD,
+  SHASHIN_MIDDLE_HIGH_PETROSIAN_THRESHOLD = 100-SHASHIN_MIDDLE_HIGH_TAL_THRESHOLD,
+  SHASHIN_HIGH_PETROSIAN_THRESHOLD = 100-SHASHIN_HIGH_TAL_THRESHOLD,
+
 
 };
 
@@ -470,6 +457,10 @@ inline Color color_of(Piece pc) {
   return Color(pc >> 3);
 }
 
+constexpr bool is_ok(Move m) {
+  return m != MOVE_NONE && m != MOVE_NULL;
+}
+
 constexpr bool is_ok(Square s) {
   return s >= SQ_A1 && s <= SQ_H8;
 }
@@ -499,10 +490,12 @@ constexpr Direction pawn_push(Color c) {
 }
 
 constexpr Square from_sq(Move m) {
+  assert(is_ok(m));
   return Square((m >> 6) & 0x3F);
 }
 
 constexpr Square to_sq(Move m) {
+  assert(is_ok(m));
   return Square(m & 0x3F);
 }
 
@@ -525,10 +518,6 @@ constexpr Move make_move(Square from, Square to) {
 template<MoveType T>
 constexpr Move make(Square from, Square to, PieceType pt = KNIGHT) {
   return Move(T + ((pt - KNIGHT) << 12) + (from << 6) + to);
-}
-
-constexpr bool is_ok(Move m) {
-  return from_sq(m) != to_sq(m); // Catch MOVE_NULL and MOVE_NONE
 }
 
 /// Based on a congruential pseudo random number generator
