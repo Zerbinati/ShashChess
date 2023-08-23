@@ -237,8 +237,8 @@ namespace {
      // The coefficients of a third-order polynomial fit is based on the fishtest data
      // for two parameters that need to transform eval to the argument of a logistic
      // function.
-     constexpr double as[] = {   0.33677609,   -4.30175627,   33.08810557,  365.60223431};
-     constexpr double bs[] = {  -2.50471102,   14.23235405,  -14.33066859,   71.42705250 };
+     constexpr double as[] = {   0.38036525,   -2.82015070,   23.17882135,  307.36768407};
+     constexpr double bs[] = {  -2.29434733,   13.27689788,  -14.26828904,   63.45318330 };
 
      // Enforce that NormalizeToPawnValue corresponds to a 50% win rate at ply 64
      static_assert(UCI::NormalizeToPawnValue == int(as[0] + as[1] + as[2] + as[3]));
@@ -403,19 +403,16 @@ uint8_t UCI::getWinProbability(Value v, int ply)
 {
   double correctionFactor = (std::min(240, ply) / 64.0);
   double forExp1 =
-      ((((0.3367760 * correctionFactor +
-          -4.30175627) *
+      ((((0.38036525 * correctionFactor -6.94334517) *
              correctionFactor +
-         33.08810557) *
+         23.17882135) *
         correctionFactor) +
-       365.60223431);
+       307.36768407);
   double forExp2 =
-      (((-2.50471102 * correctionFactor +
-         15.96509799) *
-            correctionFactor +
-        -14.33066859) *
-       correctionFactor);
-  double forExp3 = forExp2 + 71.42705250;
+      (((-2.29434733 * correctionFactor +
+         13.27689788) *
+            correctionFactor -14.26828904) *
+       correctionFactor) + 63.45318330;
   double winrateToMove =
       double(0.5 +
              1000 / (1 +
@@ -423,7 +420,7 @@ uint8_t UCI::getWinProbability(Value v, int ply)
                          exp((forExp1 -
                               (std::clamp(double(v), -4000.0,
                                           4000.0))) /
-                             forExp3)));
+                             forExp2)));
   double winrateOpponent =
       double(0.5 +
              1000 / (1 +
@@ -431,7 +428,7 @@ uint8_t UCI::getWinProbability(Value v, int ply)
                          exp((forExp1 -
                               (std::clamp(double(-v), -4000.0,
                                           4000.0))) /
-                             forExp3)));
+                             forExp2)));
   double winrateDraw = 1000 - winrateToMove - winrateOpponent;
   return static_cast<uint8_t>(round((winrateToMove + winrateDraw / 2.0) / 10.0));
 }
