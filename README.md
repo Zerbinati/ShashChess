@@ -1,5 +1,7 @@
 # Introduction
 
+![ShashChess Logo](logo/ShashChess.bmp)
+
 ShashChess is a free UCI chess engine derived from Stockfish family chess engines.
 For the evaluation function, we utilize the collaboration between Leela Chess Zero and Stockfish, for which we express our sincere gratitude.
 The goal is to apply Alexander Shashin theory exposed on the following book :
@@ -159,7 +161,9 @@ If the number is greater than threads number, all threads are for full depth bru
 
 ### MonteCarlo Tree Search section (experimental: thanks to original Stephan Nicolet work)
 
-_Boolean, Default: False_ If activated, thanks to Shashin theory, the engine will use the MonteCarlo Tree Search for Capablanca quiescent type positions and also for caos ones, in the manner specified by the following parameters. The idea is to exploit Lc0 best results in those positions types, because Lc0 uses mcts in the search.
+#### MCTS by Shashin
+
+_Boolean, Default: False_ If activated, thanks to Shashin theory, the engine will use the MonteCarlo Tree Search for Petrosian high, high middle and middle positions, in the manner specified by the following parameters. The idea is to exploit Lc0 best results in those positions types, because Lc0 uses mcts in the search.
 
 #### MCTSThreads
 
@@ -176,6 +180,10 @@ Only in multi mcts mode, for tree policy.
 
 _Integer, Default: 5, Min: 0, Max: 1000_
 Only in multi mcts mode, for Upper Confidence Bound.
+
+#### MCTS Explore
+
+_Boolean, Default: False_ If activated, mcts is also performed for highly Tal type positions and Capablanca and Petrosian type positions.
 
 ### Live Book section (thanks to Eman's author Khalid Omar for windows builds)
 
@@ -270,6 +278,20 @@ N.B.
 
 Because of disk access, to be effective, the learning must be made at no bullet time controls (less than 5 minutes/game).
 
+**Note on Architecture Support for Reinforcement Learning**  
+The reinforcement learning feature (experience file) is supported on 64-bit little-endian architectures. The following 64-bit non-little-endian architectures are relatively rare and specialized:
+- **IBM z/Architecture** (mainframe systems)
+- **POWER** (PowerPC 64-bit, used in IBM servers)
+- **SPARC** (historically used in enterprise servers)
+
+These big-endian architectures are not currently supported. The experience file format uses native little-endian byte ordering, which is compatible with:
+- x86-64 (Intel/AMD processors)
+- ARM64 (Apple Silicon, modern smartphones and tablets)
+- RISC-V (in little-endian mode)
+- All other mainstream 64-bit little-endian platforms
+
+If you're using one of the specialized big-endian architectures, you may need to convert the experience files or disable the reinforcement learning feature.
+
 ### Read only learning
 
 _Boolean, Default: False_ 
@@ -300,24 +322,25 @@ are settled, it will force the initial position/algorithm understanding
 If, in the wdl model, we define wdl_w=Win percentage, wdl_d=Drawn percentage and Win probability=(2*wdl_w+wdl_d)/10, 
 we have the following mapping:
 
-Win probability range | Shashin position’s type        | Informator symbols    | 
-| --------------------| ------------------------------ | ----------------------|
-| [0, 6]              | High Petrosian                 | -+                    | 
-| [7, 11]              | Middle-High Petrosian          | -+ \ -/+              |
-| [12,14]             | Middle Petrosian               | -/+                   |  
-| [15,20]             | Middle-Low Petrosian           | -/+ \ =/+             |
-| [21,24]             | Low Petrosian                  | =/+                   |
-| [24,49]             | Caos: Capablanca-Low Petrosian | =/+ \ =               |
-| [50]                | Capablanca                     | =                     |
-| [51,76]             | Caos: Capablanca-Low Tal       | = \ +/=               | 
-| [77,79]             | Low Tal                        | +/=                   |
-| [80,85]             | Low-Middle Tal                 | +/= | +/-             |
-| [86,88]             | Middle Tal                     | +/-                   |
-| [89,93]             | Middle-High Tal                | +/- \ +-              |
-| [94,100]            | High Tal                       | +-                    | 
+| **WDL Range (W, D, L)**       | **Shashin Position’s Type**          | **Win Probability Range** | **Informator Symbols**| **Description**                                             |
+|-------------------------------|--------------------------------------|---------------------------|-----------------------|-------------------------------------------------------------|
+| [0, 3], [0, 4], [96, 100]    | High Petrosian                       | [0, 5]                  | -+                     | Winning: a decisive disadvantage, with the position clearly leading to victory.      |
+| [4, 6], [5, 8], [89, 95]     | High-Middle Petrosian                | [6, 10]                 | -+ \ -/+               | Decisive disadvantage: dominant position and likely winning.                      |
+| [7, 9], [9, 12], [80, 87]    | Middle Petrosian                     | [11, 15]                 | -/+                    | Clear disadvantage: a substantial positional advantage, but a win is not yet inevitable.                          |
+| [10, 12], [13, 16], [73, 79]  | Middle-Low Petrosian                 | [16, 20]                 | -/+ \ =/+              | Significant disadvantage: strong edge                   |
+| [13, 15], [17, 39], [66, 71]  | Low Petrosian                        | [21, 24]                 | =/+                    | Slight disadvantage with a positional edge, but no immediate threats.              |
+| [0, 30], [40, 99], [31, 64]  | Chaos: Capablanca-Petrosian          | [25, 49]                 | ↓                      | Opponent pressure and initiative: defensive position.        |
+| [0, 0], [100, 100], [0, 0]    | Capablanca                           | [50, 50]                 | =                      | Equal position. Both sides are evenly matched, with no evident advantage.           |
+| [30, 64], [40, 99], [0, 30]  | Chaos: Capablanca-Tal                | [51, 75]                 | ↑                      | Initiative: playing dictation with active moves and forcing ideas.                     |
+| [65, 71], [17, 39], [13, 15]   | Low Tal                              | [76, 79]                 | +/=                    | Slight advantage: a minor positional edge, but it’s not significant.                    |
+| [72, 78], [13, 16], [10, 12]  | Middle-Low Tal                       | [80, 84]                 | +/= \ +/-              |  Slightly better, tending toward a clear advantage. The advantage is growing, but the position is still not decisive.            |
+| [79, 87], [9, 12], [7, 9]    | Middle Tal                           | [85, 89]                 | +/-                    | Clear advantage: a significant edge, but still with defensive chances.                          |
+| [88, 95], [5, 8], [4, 6]      | High-Middle Tal                      | [90, 94]                 | +/- \ +-               | Dominant position, almost decisive, not quite winning yet, but trending toward victory.                           |
+| [96, 100], [0, 4], [0, 3]    | High Tal                             | [95, 100]                | +-                     | Winning: a decisive advantage, with victory nearly assured.   |
+| In particular, [33, 33], [33, 33], [33, 33]                   | Chaos: Capablanca-Petrosian-Tal | (Unclassified)                   | ∞                      | Total chaos: unclear position, dynamically balanced, with no clear advantage for either side and no clear positional trends.                       |
 
 N.B.
-The winProbability also take into account the depth at which a move has been calculated.
+The wdl model also takes into account the history of the position at which a move has been calculated.
 So, it's more effective than the cp. 
 
 #### Tal
@@ -355,6 +378,56 @@ Stockfish community
 
 
 Sorry If I forgot someone.
+
+# ShashChess vs Stockfish Evaluation Trace Comparison
+
+## Detailed Structure Analysis
+
+| Section | Component | ShashChess Implementation | Stockfish Implementation | Human-Player Focus |
+|---------|-----------|---------------------------|--------------------------|-------------------|
+| **1. Core Evaluation** | Basic NNUE Evaluation | Enhanced with additional analysis layers | Standard NNUE evaluation | **ShashChess adds explanatory notes about technical accuracy** |
+| | Value Conversion | Always converts to White's perspective for consistency | Converts to White's perspective | **Explicitly states perspective for clarity** |
+| **2. WDL & Probability** | Win Probability | Detailed calculation with Shashin zones | Not implemented | **Critical for human decision-making** |
+| | WDL Model | Full Win/Draw/Loss percentages | Not implemented | **Helps humans assess practical chances** |
+| | Shashin Zones | 12 distinct positional classifications | Not implemented | **Classifies position type for strategic planning** |
+| **3. Piece Analysis** | Piece Activity | Horizontal ranking (worst to best) | Not implemented | **Identifies poorly placed pieces (Makogonov Principle)** |
+| | Activity Metrics | Multiple factors: attacks, center control, king proximity | Not implemented | **Helps humans understand piece quality** |
+| | Worst Unit Identification | Explicitly marks least active pieces | Not implemented | **Direct guidance for improvement** |
+| **4. Move Analysis** | Legal Moves Ordering | By win probability + evaluation | Not implemented | **Shows best practical moves first** |
+| | Move Information | Centipawn + win percentage for each move | Not implemented | **Quantifies move quality in human terms** |
+| | Static Activity Focus | Current position analysis | Not implemented | **Immediate actionable information** |
+| **5. Output Structure** | Section Headers | Clear thematic sections ("SHASHIN STATIC ANALYSIS") | Basic evaluation output | **Organized for easy human consumption** |
+| | Explanatory Notes | Technical accuracy disclaimers | Minimal explanations | **Helps non-engineers understand output** |
+| | Visual Formatting | Horizontal lists, clear markings | Traditional vertical format | **Easier to scan and comprehend** |
+
+## Key Human-Oriented Features in ShashChess
+
+### 1. **Strategic Position Classification**
+- **Shashin Zones**: 12 distinct classifications from "High Petrosian" to "High Tal"
+- **Benefit**: Players instantly understand position type and appropriate strategic plans
+
+### 2. **Piece Improvement Guidance**
+- **Makogonov Principle**: Identifies worst-placed pieces needing activation
+- **Benefit**: Directs human attention to specific pieces that need improvement
+
+### 3. **Practical Move Selection**
+- **Win Probability Ordering**: Moves sorted by practical winning chances
+- **Benefit**: Shows which moves actually improve real-game results
+
+### 4. **Probability-Based Decision Making**
+- **WDL Model**: Converts abstract evaluations to win/draw/loss percentages
+- **Benefit**: Players understand real-game implications of positions
+
+## Technical Comparison Summary
+
+| Aspect | ShashChess | Stockfish |
+|--------|------------|-----------|
+| **Analysis Depth** | Multi-layered human-oriented analysis | Single-layer technical evaluation |
+| **Output Focus** | Educational and practical guidance | Engine diagnostic and development |
+| **Information Type** | Strategic insights + quantitative data | Pure quantitative evaluation |
+| **User Experience** | Organized, explanatory, actionable | Minimal, technical, raw data |
+
+**ShashChess Advantage**: Transforms engine analysis from technical data into actionable chess intelligence that directly supports human learning and decision-making.
 
 <h1 align="center">Stockfish NNUE</h1>
 
@@ -639,3 +712,42 @@ source code, these changes must also be made available under the GPL.
 
 For full details, read the copy of the GPL v3 found in the file named
 *Copying.txt*.
+## Acknowledgements
+
+Stockfish uses neural networks trained on [data provided by the Leela Chess Zero
+project][lc0-data-link], which is made available under the [Open Database License][odbl-link] (ODbL).
+
+
+[authors-link]:       https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS
+[build-link]:         https://github.com/official-stockfish/Stockfish/actions/workflows/stockfish.yml
+[commits-link]:       https://github.com/official-stockfish/Stockfish/commits/master
+[discord-link]:       https://discord.gg/GWDRS3kU6R
+[issue-link]:         https://github.com/official-stockfish/Stockfish/issues/new?assignees=&labels=&template=BUG-REPORT.yml
+[discussions-link]:   https://github.com/official-stockfish/Stockfish/discussions/new
+[fishtest-link]:      https://tests.stockfishchess.org/tests
+[guideline-link]:     https://github.com/official-stockfish/fishtest/wiki/Creating-my-first-test
+[license-link]:       https://github.com/official-stockfish/Stockfish/blob/master/Copying.txt
+[programming-link]:   https://www.chessprogramming.org/Main_Page
+[programmingsf-link]: https://www.chessprogramming.org/Stockfish
+[readme-link]:        https://github.com/official-stockfish/Stockfish/blob/master/README.md
+[release-link]:       https://github.com/official-stockfish/Stockfish/releases/latest
+[src-link]:           https://github.com/official-stockfish/Stockfish/tree/master/src
+[stockfish128-logo]:  https://stockfishchess.org/images/logo/icon_128x128.png
+[uci-link]:           https://backscattering.de/chess/uci/
+[website-link]:       https://stockfishchess.org
+[website-blog-link]:  https://stockfishchess.org/blog/
+[wiki-link]:          https://github.com/official-stockfish/Stockfish/wiki
+[wiki-compile-link]:  https://github.com/official-stockfish/Stockfish/wiki/Compiling-from-source
+[wiki-uci-link]:      https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands
+[wiki-usage-link]:    https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage
+[worker-link]:        https://github.com/official-stockfish/fishtest/wiki/Running-the-worker
+[lc0-data-link]:      https://storage.lczero.org/files/training_data
+[odbl-link]:          https://opendatacommons.org/licenses/odbl/odbl-10.txt
+
+[build-badge]:        https://img.shields.io/github/actions/workflow/status/official-stockfish/Stockfish/stockfish.yml?branch=master&style=for-the-badge&label=stockfish&logo=github
+[commits-badge]:      https://img.shields.io/github/commits-since/official-stockfish/Stockfish/latest?style=for-the-badge
+[discord-badge]:      https://img.shields.io/discord/435943710472011776?style=for-the-badge&label=discord&logo=Discord
+[fishtest-badge]:     https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Fishtest&up_color=success&up_message=Online&url=https%3A%2F%2Ftests.stockfishchess.org%2Ftests%2Ffinished
+[license-badge]:      https://img.shields.io/github/license/official-stockfish/Stockfish?style=for-the-badge&label=license&color=success
+[release-badge]:      https://img.shields.io/github/v/release/official-stockfish/Stockfish?style=for-the-badge&label=official%20release
+[website-badge]:      https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https%3A%2F%2Fstockfishchess.org

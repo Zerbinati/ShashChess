@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@
 #include <mutex>
 #include <vector>
 
+#include "memory.h"
 #include "numa.h"
 #include "position.h"
 #include "search.h"
@@ -93,8 +94,8 @@ class Thread {
     void   wait_for_search_finished();
     size_t id() const { return idx; }
 
-    std::unique_ptr<Search::Worker> worker;
-    std::function<void()>           jobFunc;
+    LargePagePtr<Search::Worker> worker;
+    std::function<void()>        jobFunc;
 
    private:
     std::mutex                mutex;
@@ -165,7 +166,7 @@ class ThreadPool {
     std::vector<std::unique_ptr<Thread>> threads;
     std::vector<NumaIndex>               boundThreadToNumaNode;
 
-    uint64_t accumulate(std::atomic<uint64_t> Search::Worker::*member) const {
+    uint64_t accumulate(std::atomic<uint64_t> Search::Worker::* member) const {
 
         uint64_t sum = 0;
         for (auto&& th : threads)

@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -51,6 +51,18 @@ struct TTData {
     Depth depth;
     Bound bound;
     bool  is_pv;
+
+    TTData() = delete;
+
+    // clang-format off
+    TTData(Move m, Value v, Value ev, Depth d, Bound b, bool pv) :
+        move(m),
+        value(v),
+        eval(ev),
+        depth(d),
+        bound(b),
+        is_pv(pv) {};
+    // clang-format on
 };
 
 

@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,23 +31,27 @@
 #include <string_view>
 #include <vector>
 
+#include "history.h"
 #include "misc.h"
-#include "movepick.h"
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
 #include "numa.h"
-#include "position.h"
 #include "score.h"
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
-//from ShashChess begin
+#include "types.h"
+//from Shashin begin
+#include "shashin/shashin_position.h"
 #include "evaluate.h"
 #include "book/book_manager.h"
-//from ShashChess end
-#include "types.h"
+#include <memory>
+#include "shashin/shashin_manager.h"
+//from Shashin end
+
 
 namespace ShashChess {
 
+class ShashinManager;  //shashin
 // Different node types, used as a template parameter
 enum NodeType {
     NonPV,
@@ -60,27 +64,29 @@ class ThreadPool;
 class OptionsMap;
 
 namespace Search {
+
 // Stack struct keeps track of the information we need to remember from nodes
 // shallower and deeper in the tree during the search. Each search thread has
 // its own array of Stack objects, indexed by the current ply.
 struct Stack {
-    Move*                     pv;
-    PieceToHistory*           continuationHistory;
-    PieceToCorrectionHistory* continuationCorrectionHistory;
-    int                       ply;
-    Move                      currentMove;
-    Move                      excludedMove;
-    Value                     staticEval;
-    int                       statScore;
-    int                       moveCount;
-    bool                      inCheck;
-    bool                      ttPv;
-    bool                      ttHit;
-    int                       cutoffCnt;
-    //from Crystal begin
-    bool secondaryLine;
-    bool mainLine;
-    //from Crystal end
+    Move*                       pv;
+    PieceToHistory*             continuationHistory;
+    CorrectionHistory<PieceTo>* continuationCorrectionHistory;
+    int                         ply;
+    Move                        currentMove;
+    Move                        excludedMove;
+    Value                       staticEval;
+    int                         statScore;
+    int                         moveCount;
+    bool                        inCheck;
+    bool                        ttPv;
+    bool                        ttHit;
+    int                         cutoffCnt;
+    int                         reduction;
+    //from Shashin Crystal begin
+    bool secondaryLine = false;
+    bool mainLine      = false;
+    //from Shashin Crystal end
 };
 
 
@@ -133,7 +139,6 @@ struct LimitsType {
     int                      movestogo, depth, mate, perft, infinite;
     uint64_t                 nodes;
     bool                     ponderMode;
-    Square                   capSq;
 };
 
 
@@ -145,12 +150,14 @@ struct SharedState {
                 const OptionsMap&                               optionsMap,
                 ThreadPool&                                     threadPool,
                 TranspositionTable&                             transpositionTable,
-                const LazyNumaReplicated<Eval::NNUE::Networks>& nets) :
+                const LazyNumaReplicated<Eval::NNUE::Networks>& nets,
+                const ShashChess::ShashinConfig&                shCfg) :  //Shashin
         bookMan(bm),
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
-        networks(nets) {}
+        networks(nets),
+        shashinConfig(shCfg) {}  //shashin
 
     BookManager& bookMan;
     //from Polyfish end
@@ -158,6 +165,7 @@ struct SharedState {
     ThreadPool&                                     threads;
     TranspositionTable&                             tt;
     const LazyNumaReplicated<Eval::NNUE::Networks>& networks;
+    const ShashChess::ShashinConfig                 shashinConfig;  //Shashin
 };
 
 class Worker;
@@ -194,6 +202,7 @@ struct InfoIteration {
     size_t           currmovenumber;
 };
 
+//no skill
 // SearchManager manages the search from the main thread. It is responsible for
 // keeping track of the time, and storing data strictly related to the main thread.
 class SearchManager: public ISearchManager {
@@ -219,7 +228,8 @@ class SearchManager: public ISearchManager {
     void pv(Search::Worker&           worker,
             const ThreadPool&         threads,
             const TranspositionTable& tt,
-            Depth                     depth);
+            Depth                     depth,
+            bool                      updateShashin);  //shashin
 
     ShashChess::TimeManagement tm;
     double                     originalTimeAdjust;
@@ -250,7 +260,7 @@ class Worker {
    public:
     size_t threadIdx;  //mcts
     Worker(SharedState&, std::unique_ptr<ISearchManager>, size_t, NumaReplicatedAccessToken);
-
+    ~Worker();  //shashin
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
     void clear();
@@ -275,21 +285,26 @@ class Worker {
     ContinuationHistory   continuationHistory[2][2];
     PawnHistory           pawnHistory;
 
-    PawnCorrectionHistory         pawnCorrectionHistory;
-    MaterialCorrectionHistory     materialCorrectionHistory;
-    MajorPieceCorrectionHistory   majorPieceCorrectionHistory;
-    MinorPieceCorrectionHistory   minorPieceCorrectionHistory;
-    NonPawnCorrectionHistory      nonPawnCorrectionHistory[COLOR_NB];
-    ContinuationCorrectionHistory continuationCorrectionHistory;
-    RootMoves                     rootMoves;       //mcts
-    Depth                         completedDepth;  //mcts
-    //begin from Shashin
-    int8_t shashinWinProbabilityRange = 0;
-    int    shashinPly                 = 0;
-    //end from Shashin
-    bool nmpGuard, nmpGuardV;  //from Crystal
+    CorrectionHistory<Pawn>         pawnCorrectionHistory;
+    CorrectionHistory<Minor>        minorPieceCorrectionHistory;
+    CorrectionHistory<NonPawn>      nonPawnCorrectionHistory;
+    CorrectionHistory<Continuation> continuationCorrectionHistory;
+    TTMoveHistory                   ttMoveHistory;
+    RootMoves                       rootMoves;                          //mcts
+    Depth                           completedDepth;                     //mcts
+    bool                            nmpGuard = false, nmpSide = false;  //from Crystal-shashin
+    ShashinManager&                 getShashinManager();                //from crystal-Shashin
+    int                             lastShashinUpdatedDepth = 0;        //from shashin
+
    private:
     void iterative_deepening();
+
+    void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
+    void
+    do_move(Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss);
+    void do_null_move(Position& pos, StateInfo& st);
+    void undo_move(Position& pos, const Move move);
+    void undo_null_move(Position& pos);
 
     // This is the main search function, for both PV and non-PV nodes
     template<NodeType nodeType>
@@ -299,7 +314,8 @@ class Worker {
     template<NodeType nodeType>
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
 
-    Depth reduction(bool i, Depth d, int mn, int delta) const;
+    Depth
+    reduction(bool i, Depth d, int mn, int delta, bool isStrategical, bool isAggressive) const;
 
     // Pointer to the search manager, only allowed to be called by the main thread
     SearchManager* main_manager() const {
@@ -310,11 +326,13 @@ class Worker {
     TimePoint elapsed() const;
     TimePoint elapsed_time() const;
 
+    Value evaluate(const Position&);
+
     LimitsType limits;
 
     size_t                pvIdx, pvLast;
     std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
-    int                   selDepth, nmpMinPly, nmpSide;  //crystal
+    int                   selDepth, nmpMinPly;
     Value                 optimism[COLOR_NB];
 
     Position  rootPos;
@@ -324,7 +342,7 @@ class Worker {
     Value rootDelta;
 
     //for mcts
-    bool                      fullSearch;  //full threads patch
+    bool                      fullSearch = false;  //full threads patch
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
@@ -344,12 +362,20 @@ class Worker {
     const LazyNumaReplicated<Eval::NNUE::Networks>& networks;
 
     // Used by NNUE
+    Eval::NNUE::AccumulatorStack  accumulatorStack;
     Eval::NNUE::AccumulatorCaches refreshTable;
-
+    //Shashin begin
+    std::unique_ptr<ShashinManager>  shashinManager;
+    const ShashChess::ShashinConfig& shConfig;
     friend class ShashChess::ThreadPool;
+    //Shashin end
     friend class SearchManager;
 };
 
+struct ConthistBonus {
+    int index;
+    int weight;
+};
 //livebook begin
 #ifdef USE_LIVEBOOK
 void set_livebook_depth(int book_depth);
@@ -380,10 +406,6 @@ void set_variety(const std::string& varietyOption);  //variety
 size_t cURL_WriteFunc(void* contents, size_t size, size_t nmemb, std::string* s);
 #endif
 //from Livebook end
-Value static_value(const Eval::NNUE::Networks& networks,
-                   Position&                   pos,
-                   Search::Stack*              ss,
-                   int                         optimism);  //mcts
 }  // namespace ShashChess
 
 #endif  // #ifndef SEARCH_H_INCLUDED

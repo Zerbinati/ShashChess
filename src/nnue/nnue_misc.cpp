@@ -1,6 +1,6 @@
 /*
-  ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 The ShashChess developers (see AUTHORS file)
+  ShashChess, a UCI chess playing engine derived from Glaurung 2.1
+  Copyright (C) 2004-2025 The ShashChess developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -30,7 +30,6 @@
 #include <string_view>
 #include <tuple>
 
-#include "../evaluate.h"
 #include "../position.h"
 #include "../types.h"
 #include "../uci.h"
@@ -42,15 +41,6 @@ namespace ShashChess::Eval::NNUE {
 
 constexpr std::string_view PieceToChar(" PNBRQK  pnbrqk");
 
-
-void hint_common_parent_position(const Position&    pos,
-                                 const Networks&    networks,
-                                 AccumulatorCaches& caches) {
-    if (Eval::use_smallnet(pos))
-        networks.small.hint_common_access(pos, &caches.small);
-    else
-        networks.big.hint_common_access(pos, &caches.big);
-}
 
 namespace {
 // Converts a Value into (centi)pawns and writes it in a buffer.
@@ -88,8 +78,6 @@ void format_cp_compact(Value v, char* buffer, const Position& pos) {
         buffer[4] = '0' + cp / 1;
     }
 }
-
-
 // Converts a Value into pawns, always keeping two decimals
 void format_cp_aligned_dot(Value v, std::stringstream& stream, const Position& pos) {
 
@@ -101,12 +89,9 @@ void format_cp_aligned_dot(Value v, std::stringstream& stream, const Position& p
            << std::setiosflags(std::ios::fixed) << std::setw(6) << std::setprecision(2) << pawns;
 }
 }
-
-
 // Returns a string with the value of each piece on a board,
 // and a table for (PSQT, Layers) values bucket by bucket.
-std::string
-trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::AccumulatorCaches& caches) {
+std::string trace(Position& pos, const Networks& networks, AccumulatorCaches& caches) {
 
     std::stringstream ss;
 
@@ -115,7 +100,7 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
     for (int row = 0; row < 3 * 8 + 1; ++row)
         board[row][8 * 8 + 1] = '\0';
 
-    // A lambda to output one box of the board
+    // Usiamo SEMPRE centipawn per la tabella dei pezzi, indipendentemente da showWDL
     auto writeSquare = [&board, &pos](File file, Rank rank, Piece pc, Value value) {
         const int x = int(file) * 8;
         const int y = (7 - int(rank)) * 3;
@@ -126,13 +111,14 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
         board[y][x] = board[y][x + 8] = board[y + 3][x + 8] = board[y + 3][x] = '+';
         if (pc != NO_PIECE)
             board[y + 1][x + 4] = PieceToChar[pc];
-        if (value != VALUE_NONE)
+        if (is_valid(value))
             format_cp_compact(value, &board[y + 2][x + 2], pos);
     };
 
-    // We estimate the value of each piece by doing a differential evaluation from
-    // the current base eval, simulating the removal of the piece from its square.
-    auto [psqt, positional] = networks.big.evaluate(pos, &caches.big);
+    AccumulatorStack accumulators;
+
+    // Calcolo tradizionale in centipawn
+    auto [psqt, positional] = networks.big.evaluate(pos, accumulators, &caches.big);
     Value base              = psqt + positional;
     base                    = pos.side_to_move() == WHITE ? base : -base;
 
@@ -145,29 +131,29 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
             if (pc != NO_PIECE && type_of(pc) != KING)
             {
-                auto st = pos.state();
-
                 pos.remove_piece(sq);
-                st->accumulatorBig.computed[WHITE] = st->accumulatorBig.computed[BLACK] = false;
 
-                std::tie(psqt, positional) = networks.big.evaluate(pos, &caches.big);
+                accumulators.reset();
+                std::tie(psqt, positional) = networks.big.evaluate(pos, accumulators, &caches.big);
                 Value eval                 = psqt + positional;
                 eval                       = pos.side_to_move() == WHITE ? eval : -eval;
                 v                          = base - eval;
 
                 pos.put_piece(pc, sq);
-                st->accumulatorBig.computed[WHITE] = st->accumulatorBig.computed[BLACK] = false;
             }
 
             writeSquare(f, r, pc, v);
         }
 
+    // Titolo sempre in centipawn
     ss << " NNUE derived piece values:\n";
     for (int row = 0; row < 3 * 8 + 1; ++row)
         ss << board[row] << '\n';
     ss << '\n';
 
-    auto t = networks.big.trace_evaluate(pos, &caches.big);
+    // Tabella bucket sempre in centipawn
+    accumulators.reset();
+    auto t = networks.big.trace_evaluate(pos, accumulators, &caches.big);
 
     ss << " NNUE network contributions "
        << (pos.side_to_move() == WHITE ? "(White to move)" : "(Black to move)") << std::endl
@@ -178,26 +164,23 @@ trace(Position& pos, const Eval::NNUE::Networks& networks, Eval::NNUE::Accumulat
 
     for (std::size_t bucket = 0; bucket < LayerStacks; ++bucket)
     {
-        ss << "|  " << bucket << "        "  //
+        ss << "|  " << bucket << "        "
            << " |  ";
         format_cp_aligned_dot(t.psqt[bucket], ss, pos);
-        ss << "  "  //
+        ss << "  "
            << " |  ";
         format_cp_aligned_dot(t.positional[bucket], ss, pos);
-        ss << "  "  //
+        ss << "  "
            << " |  ";
         format_cp_aligned_dot(t.psqt[bucket] + t.positional[bucket], ss, pos);
-        ss << "  "  //
+        ss << "  "
            << " |";
         if (bucket == t.correctBucket)
             ss << " <-- this bucket is used";
         ss << '\n';
     }
-
     ss << "+------------+------------+------------+------------+\n";
 
     return ss.str();
 }
-
-
 }  // namespace ShashChess::Eval::NNUE

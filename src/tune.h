@@ -1,6 +1,6 @@
 /*
   ShashChess, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and ShashChess developers (see AUTHORS file)
 
   ShashChess is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -170,11 +170,20 @@ class Tune {
     static OptionsMap* options;
 };
 
+template<typename... Args>
+constexpr void tune_check_args(Args&&...) {
+    static_assert((!std::is_fundamental_v<Args> && ...), "TUNE macro arguments wrong");
+}
+
 // Some macro magic :-) we define a dummy int variable that the compiler initializes calling Tune::add()
 #define STRINGIFY(x) #x
 #define UNIQUE2(x, y) x##y
 #define UNIQUE(x, y) UNIQUE2(x, y)  // Two indirection levels to expand __LINE__
-#define TUNE(...) int UNIQUE(p, __LINE__) = Tune::add(STRINGIFY((__VA_ARGS__)), __VA_ARGS__)
+#define TUNE(...) \
+    int UNIQUE(p, __LINE__) = []() -> int { \
+        tune_check_args(__VA_ARGS__); \
+        return Tune::add(STRINGIFY((__VA_ARGS__)), __VA_ARGS__); \
+    }();
 
 #define UPDATE_ON_LAST() bool UNIQUE(p, __LINE__) = Tune::update_on_last = true
 
